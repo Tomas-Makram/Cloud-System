@@ -41,12 +41,19 @@ int SimpleAutoComplete::Impl::getch() {
     return _getch();
 #else
     char ch;
-    if (read(STDIN_FILENO, &ch, 1) == 1) {
-        return ch;
+    ssize_t n = read(STDIN_FILENO, &ch, 1);
+    if (n == 1) {
+        static bool unitbuf_set = false;
+        if (!unitbuf_set) {
+            std::cout << std::unitbuf;
+            unitbuf_set = true;
+        }
+        return static_cast<unsigned char>(ch);
     }
     return EOF;
 #endif
 }
+
 
 void SimpleAutoComplete::Impl::showSuggestions(const std::string& input) {
     if (!showSuggestionsFlag) return;
