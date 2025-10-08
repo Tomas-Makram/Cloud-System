@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Manager - MiniHSFS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+            --primary-color: #5c6bc0;
+            --hover-color: #3949ab;
+            --danger-color: #e53935;
+            --success-color: #43a047;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            overflow-x: hidden;
+        }
+
+        .sidebar {
+            width: var(--sidebar-width);
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            background: linear-gradient(180deg, var(--primary-color) 0%, #3f51b5 100%);
+            color: white;
+            padding-top: 20px;
+            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+            z-index: 1000;
+            transition: width 0.3s;
+        }
+
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 20px;
+            transition: margin-left 0.3s;
+            background-color: #ffffff;
+            min-height: 100vh;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 4px;
+        }
+
+            .file-item:hover {
+                background-color: #f0f0f0;
+                transform: translateY(-1px);
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+
+        .file-icon {
+            font-size: 1.5rem;
+            margin-right: 15px;
+            color: var(--primary-color);
+            flex-shrink: 0;
+        }
+
+        .file-info {
+            flex-grow: 1;
+            min-width: 0;
+        }
+
+        .file-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 500;
+        }
+
+        .file-actions {
+            opacity: 0;
+            transition: opacity 0.2s;
+            display: flex;
+            gap: 5px;
+        }
+
+        .file-item:hover .file-actions {
+            opacity: 1;
+        }
+
+        .file-actions-btn {
+            background: none;
+            border: none;
+            padding: 5px;
+            border-radius: 4px;
+            color: #6c757d;
+            transition: all 0.2s;
+            margin-left: 5px;
+        }
+
+            .file-actions-btn:hover {
+                background-color: #e9ecef;
+                color: #495057;
+            }
+
+            .file-actions-btn.delete {
+                color: #dc3545;
+            }
+
+                .file-actions-btn.delete:hover {
+                    background-color: #f8d7da;
+                }
+
+            .file-actions-btn.properties {
+                color: #0d6efd;
+            }
+
+                .file-actions-btn.properties:hover {
+                    background-color: #e7f1ff;
+                }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 4px;
+            justify-content: space-between;
+        }
+
+        .breadcrumb {
+            background-color: #f5f5f5;
+            padding: 0.75rem 1rem;
+            border-radius: 0.35rem;
+            margin-bottom: 1rem;
+        }
+
+        .breadcrumb-item a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .context-menu {
+            position: absolute;
+            z-index: 1000;
+            background: white;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            border-radius: 4px;
+            display: none;
+            min-width: 200px;
+        }
+
+        .context-menu-item {
+            padding: 8px 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+
+            .context-menu-item:hover {
+                background-color: #f5f5f5;
+            }
+
+            .context-menu-item i {
+                margin-right: 10px;
+                width: 16px;
+                color: var(--primary-color);
+            }
+
+        #file-list {
+            max-height: 70vh;
+            overflow-y: auto;
+            border-radius: 0 0 4px 4px;
+        }
+
+        .path-display {
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+        }
+
+        .card {
+            border: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        .card-header {
+            background-color: #ffffff;
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
+        }
+
+        .btn-outline-primary {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+            .btn-outline-primary:hover {
+                background-color: var(--primary-color);
+                color: white;
+            }
+
+        .btn-outline-danger {
+            color: var(--danger-color);
+            border-color: var(--danger-color);
+        }
+
+            .btn-outline-danger:hover {
+                background-color: var(--danger-color);
+                color: white;
+            }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+            .btn-primary:hover {
+                background-color: var(--hover-color);
+                border-color: var(--hover-color);
+            }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            border-color: var(--danger-color);
+        }
+
+        .btn-success {
+            background-color: var(--success-color);
+            border-color: var(--success-color);
+        }
+
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin: 2px 10px;
+            transition: all 0.2s;
+        }
+
+            .sidebar .nav-link:hover {
+                background-color: rgba(255,255,255,0.1);
+                color: white;
+            }
+
+            .sidebar .nav-link.active {
+                background-color: rgba(255,255,255,0.2);
+                color: white;
+            }
+
+            .sidebar .nav-link i {
+                margin-right: 10px;
+            }
+
+        .sidebar .shutdown-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            margin: 0 15px;
+        }
+
+        .rename-input {
+            display: none;
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .file-name-text {
+            cursor: text;
+        }
+
+        .shutdown-btn {
+            background-color: #ff4444;
+            border-color: #ff4444;
+            color: white;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(255, 68, 68, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+            .shutdown-btn:hover {
+                background-color: #cc0000;
+                border-color: #cc0000;
+                transform: translateY(-2px);
+                box-shadow: 0 6px 8px rgba(255, 68, 68, 0.4);
+            }
+
+            .shutdown-btn:active {
+                transform: translateY(0);
+            }
+
+            .shutdown-btn::before {
+                content: '';
+                position: absolute;
+                top: -50%;
+                left: -50%;
+                width: 200%;
+                height: 200%;
+                background: rgba(255, 255, 255, 0.1);
+                transform: rotate(45deg);
+                animation: shine 3s infinite;
+            }
+
+        @keyframes shine {
+            0% {
+                left: -50%;
+                top: -50%;
+            }
+
+            100% {
+                left: 150%;
+                top: 150%;
+            }
+        }
+
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="text-center mb-4">
+            <h4>MiniHSFS</h4>
+        </div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link active" href="#">
+                    <i class="bi bi-folder-fill"></i> Files
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link shutdown-btn btn btn-outline-light" id="btn-shutdown">
+                    <i class="bi bi-power"></i> Shutdown
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Breadcrumb Navigation -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb" id="breadcrumb">
+                    <li class="breadcrumb-item"><a href="#" data-path="/">Root</a></li>
+                </ol>
+            </nav>
+            <div class="path-display" id="current-path-display">/</div>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="d-flex mb-3 gap-2">
+            <button class="btn btn-sm btn-outline-secondary" id="btn-back" disabled>
+                <i class="bi bi-arrow-left"></i> Back
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="btn-up" disabled>
+                <i class="bi bi-arrow-up"></i> Up
+            </button>
+            <button class="btn btn-sm btn-primary" id="btn-new-folder">
+                <i class="bi bi-folder-plus"></i> New Folder
+            </button>
+            <button class="btn btn-sm btn-primary" id="btn-new-file">
+                <i class="bi bi-file-earmark-plus"></i> New File
+            </button>
+        </div>
+
+        <!-- File List -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Files</span>
+                <span class="badge bg-primary" id="item-count">0 items</span>
+            </div>
+            <div class="card-body p-0">
+                <div id="file-list">
+                    <!-- Will be populated with files and folders -->
+                </div>
+            </div>
+        </div>
+
+        <!-- New Folder Modal -->
+        <div class="modal fade" id="newFolderModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">New Folder</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="new-folder-form">
+                            <div class="mb-3">
+                                <label class="form-label">Folder Name</label>
+                                <input type="text" class="form-control" id="folder-name" required>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" form="new-folder-form" class="btn btn-primary">Create</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- New File Modal -->
+        <div class="modal fade" id="newFileModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">New File</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="new-file-form">
+                            <div class="mb-3">
+                                <label class="form-label">File Name</label>
+                                <input type="text" class="form-control" id="file-name" required>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" form="new-file-form" class="btn btn-primary">Create</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Confirmation Modal -->
+        <div class="modal fade" id="confirmDeleteModal">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Confirm Delete</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p id="delete-message">Are you sure you want to delete this folder?</p>
+                        <div class="alert alert-warning" id="delete-warning" style="display: none;">
+                            <i class="bi bi-exclamation-triangle-fill"></i> This folder is not empty! All contents will be deleted.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-danger" id="btn-confirm-delete">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Properties Modal -->
+        <div class="modal fade" id="propertiesModal">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="propertiesModalTitle">Item Properties</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Name:</label>
+                            <div class="form-control-plaintext" id="prop-name"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Path:</label>
+                            <div class="form-control-plaintext" id="prop-path"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Created:</label>
+                            <div class="form-control-plaintext" id="prop-created"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Modified:</label>
+                            <div class="form-control-plaintext" id="prop-modified"></div>
+                        </div>
+                        <div class="mb-3" id="prop-items-container">
+                            <label class="form-label">Items:</label>
+                            <div class="form-control-plaintext" id="prop-items"></div>
+                        </div>
+                        <div class="mb-3" id="prop-size-container" style="display: none;">
+                            <label class="form-label">Size:</label>
+                            <div class="form-control-plaintext" id="prop-size"></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rename Modal -->
+        <div class="modal fade" id="renameModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Rename</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="rename-form">
+                            <div class="mb-3">
+                                <label class="form-label">New Name</label>
+                                <input type="text" class="form-control" id="new-name" required>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" form="rename-form" class="btn btn-primary">Rename</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Editor Modal -->
+        <div class="modal fade" id="editFileModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="editFileModalTitle">Edit File</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <textarea id="file-content" class="form-control" style="height: 400px;"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="btn-save-file">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="context-menu">
+        <div class="context-menu-item" id="ctx-open"><i class="bi bi-folder2-open"></i> Open</div>
+        <div class="context-menu-item" id="ctx-rename"><i class="bi bi-pencil"></i> Rename</div>
+        <div class="context-menu-item" id="ctx-delete"><i class="bi bi-trash"></i> Delete</div>
+        <div class="context-menu-item" id="ctx-properties"><i class="bi bi-info-circle"></i> Properties</div>
+        <div class="context-menu-item" id="ctx-new-folder"><i class="bi bi-folder-plus"></i> New Folder</div>
+        <div class="context-menu-item" id="ctx-new-file"><i class="bi bi-file-earmark-plus"></i> New File</div>
+        <div class="context-menu-item" id="ctx-download"><i class="bi bi-download"></i> Download</div>
+        <div class="context-menu-item" id="ctx-edit"><i class="bi bi-file-earmark-code"></i> Edit</div>
+        <div class="context-menu-item" id="ctx-copy"><i class="bi bi-files"></i> Copy</div>
+        <div class="context-menu-item" id="ctx-cut"><i class="bi bi-scissors"></i> Cut</div>
+        <div class="context-menu-item" id="ctx-paste"><i class="bi bi-clipboard"></i> Paste</div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let currentPath = localStorage.getItem('currentPath') || '/';
+        let pathHistory = [currentPath];
+        let historyIndex = 0;
+        let selectedItem = null;
+        let clipboard = null;
+
+        // Helper function to clean up the path
+        function cleanPath(path) {
+            if (!path) return '/';
+
+            // استبدال أي // أو أكثر بـ /
+            let clean = path.replace(/\/{2,}/g, '/');
+
+            // تأكيد إن المسار يبدأ بـ /
+            if (clean[0] !== '/') {
+                clean = '/' + clean;
+            }
+
+            // حذف / في آخر المسار (إلا لو هو root "/")
+            if (clean !== '/' && clean.endsWith('/')) {
+                clean = clean.slice(0, -1);
+            }
+
+            return clean;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function showToast(message, type = 'success') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type} alert-dismissible fade show`;
+            toast.role = 'alert';
+            toast.innerHTML = `
+                    <i class="bi ${type === 'success' ? 'bi-check-circle' : 'bi-exclamation-triangle'} me-2"></i>
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+            toastContainer.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+        // File management functions
+        function openFileForEditing(item) {
+            const path = item.dataset.path;
+
+            fetch('/readfile?path=' + encodeURIComponent(path))
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to read file');
+                    }
+                    return response.text();
+                })
+                .then(content => {
+                    document.getElementById('editFileModalTitle').textContent = `Editing: ${item.dataset.name}`;
+                    document.getElementById('file-content').value = content;
+                    document.getElementById('btn-save-file').dataset.path = path;
+
+                    const modal = new bootstrap.Modal(document.getElementById('editFileModal'));
+                    modal.show();
+                })
+                .catch(error => {
+                    console.error('Error reading file:', error);
+                    showToast(`Error: ${error.message}`, 'error');
+                });
+        }
+
+        function downloadFile(item) {
+            const path = item.dataset.path;
+            const filename = item.dataset.name;
+
+            fetch('/readfile?path=' + encodeURIComponent(path))
+                .then(response => response.blob())
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showToast('File download started');
+                })
+                .catch(error => {
+                    console.error('Error downloading file:', error);
+                    showToast(`Error: ${error.message}`, 'error');
+                });
+        }
+
+        function copyItem(item) {
+            const path = item.dataset.path;
+            const name = item.dataset.name;
+            clipboard = { action: 'copy', path: path, name: name };
+            showToast(`Copied '${name}' to clipboard`);
+        }
+
+        function cutItem(item) {
+            const path = item.dataset.path;
+            const name = item.dataset.name;
+            clipboard = { action: 'cut', path: path, name: name };
+            showToast(`Cut '${name}' to clipboard`);
+        }
+
+        function pasteItem() {
+            if (!clipboard) {
+                showToast('No item in clipboard', 'warning');
+                return;
+            }
+
+            const destPath = currentPath;
+            const srcPath = clipboard.path;
+            const newName = clipboard.name;
+
+            if (!srcPath || !newName) {
+                showToast('Invalid clipboard data', 'error');
+                return;
+            }
+
+            const endpoint = clipboard.action === 'copy' ? '/copy' : '/move';
+            const successMessage = clipboard.action === 'copy' ? 'Copied successfully' : 'Moved successfully';
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `src=${encodeURIComponent(srcPath)}&dest=${encodeURIComponent(destPath + '/' + newName)}`
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.text().then(text => { throw new Error(text || 'Operation failed') });
+                    }
+                    return response.text();
+                })
+                .then(() => {
+                    loadFileList(currentPath);
+                    showToast(successMessage);
+                    if (clipboard.action === 'cut') {
+                        clipboard = null;
+                    }
+                })
+                .catch(error => {
+                    console.error(`Error in ${clipboard.action === 'copy' ? 'copying' : 'moving'}:`, error);
+                    showToast(`Error: ${error.message}`, 'error');
+                });
+        }
+
+        // Create New Dir Fun
+        function createNewFolder(folderName) {
+            const path = currentPath === '/' ? `/${folderName}` : `${currentPath}/${folderName}`;
+
+            fetch('/mkdir', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `path=${encodeURIComponent(path)}`
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to create folder');
+                    }
+                    return response.text();
+                })
+                .then(() => {
+                    loadFileList(currentPath);
+                    showToast(`Folder '${folderName}' created successfully`);
+                })
+                .catch(error => {
+                    console.error('Error creating folder:', error);
+                    showToast(`Error: ${error.message}`, 'error');
+                });
+        }
+
+        // Create New File Fun
+        function createNewFile(fileName) {
+            const path = currentPath === '/' ? `/${fileName}` : `${currentPath}/${fileName}`;
+
+            fetch('/createfile', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `path=${encodeURIComponent(path)}`
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to create file');
+                    }
+                    return response.text();
+                })
+                .then(() => {
+                    loadFileList(currentPath);
+                    showToast(`File '${fileName}' created successfully`);
+                })
+                .catch(error => {
+                    console.error('Error creating file:', error);
+                    showToast(`Error: ${error.message}`, 'error');
+                });
+        }
+
+        // Delete Fun
+        function deleteItem(item) {
+            const path = item.dataset.path;
+            const isDir = item.dataset.type === 'dir';
+
+            fetch('/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `path=${encodeURIComponent(path)}&is_dir=${isDir}`
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to delete item');
+                    }
+                    return response.text();
+                })
+                .then(() => {
+                    loadFileList(currentPath);
+                    showToast(`${isDir ? 'Folder' : 'File'} deleted successfully`);
+                })
+                .catch(error => {
+                    console.error('Error deleting:', error);
+                    showToast(`Error: ${error.message}`, 'error');
+                });
+        }
+
+        // Rename Fun
+        function renameItem(item, newName) {
+            const oldPath = item.dataset.path;
+            const isDir = item.dataset.type === 'dir';
+
+            fetch('/rename', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `old_path=${encodeURIComponent(oldPath)}&new_name=${encodeURIComponent(newName)}&is_dir=${isDir}`
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to rename');
+                    }
+                    return response.text();
+                })
+                .then(() => {
+                    loadFileList(currentPath);
+                    showToast(`Renamed to '${newName}' successfully`);
+                })
+                .catch(error => {
+                    console.error('Error renaming:', error);
+                    showToast(`Error: ${error.message}`, 'error');
+                });
+        }
+
+        // Properties Fun
+        function showItemProperties(item) {
+            const path = item.dataset.path;
+            const name = item.dataset.name;
+            const isDir = item.dataset.type === 'dir';
+
+            fetch('/properties', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `path=${encodeURIComponent(path)}`
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to get properties');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    document.getElementById('propertiesModalTitle').textContent =
+                        isDir ? 'Folder Properties' : 'File Properties';
+                    document.getElementById('prop-name').textContent = data.name;
+                    document.getElementById('prop-path').textContent = data.propPath;
+                    document.getElementById('prop-created').textContent = data.created || 'Unknown';
+                    document.getElementById('prop-modified').textContent = data.modified || 'Unknown';
+
+                    const itemsContainer = document.getElementById('prop-items-container');
+                    const sizeContainer = document.getElementById('prop-size-container');
+
+                    if (isDir) {
+                        itemsContainer.style.display = 'block';
+                        document.getElementById('prop-items').textContent = data.item_count || '0';
+                        sizeContainer.style.display = 'none';
+                    } else {
+                        itemsContainer.style.display = 'none';
+                        sizeContainer.style.display = 'block';
+                        document.getElementById('prop-size').textContent = formatFileSize(data.size);
+                    }
+
+                    const modal = new bootstrap.Modal(document.getElementById('propertiesModal'));
+                    modal.show();
+                })
+                .catch(error => {
+                    console.error('Error getting properties:', error);
+                    showToast(`Error: ${error.message}`, 'error');
+                });
+        }
+
+        // UI management functions
+        function loadFileList(path) {
+            document.getElementById('file-list').innerHTML = '<div class="text-center py-5">Loading...</div>';
+
+            // استخدام /api/files بدلاً من /list
+            fetch(`/files?path=${encodeURIComponent(path)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        if (response.status === 401) {
+                            window.location.href = '/'; // إعادة توجيه إذا لم يكن مسجلاً
+                            return;
+                        }
+                        throw new Error('Failed to load contents');
+                    }
+                    return response.text();
+                })
+                .then(html => {
+                    document.getElementById('file-list').innerHTML = html;
+                    updateBreadcrumb(path);
+                    updatePathDisplay(path);
+                    updateNavigationButtons();
+
+                    const itemCount = document.querySelectorAll('#file-list .file-item').length;
+                    document.getElementById('item-count').textContent = `${itemCount} ${itemCount === 1 ? 'item' : 'items'}`;
+
+                    // إضافة event listeners للأزرار
+                    document.querySelectorAll('.file-actions-btn.properties').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const fileItem = btn.closest('.file-item');
+                            showItemProperties(fileItem);
+                        });
+                    });
+
+                    document.querySelectorAll('.file-actions-btn.delete').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const fileItem = btn.closest('.file-item');
+                            selectedItem = fileItem;
+
+                            const isDir = fileItem.dataset.type === 'dir';
+                            document.getElementById('delete-message').textContent =
+                                `Are you sure you want to delete this ${isDir ? 'folder' : 'file'}?`;
+
+                            const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+                            modal.show();
+                        });
+                    });
+
+                    // النقر على المجلدات للتنقل
+                    document.querySelectorAll('.file-item[data-type="dir"]').forEach(item => {
+                        item.addEventListener('click', (e) => {
+                            if (!e.target.classList.contains('file-actions-btn')) {
+                                navigateTo(item.dataset.path);
+                            }
+                        });
+                    });
+
+                    localStorage.setItem('currentPath', path);
+                })
+                .catch(error => {
+                    console.error('Error loading file list:', error);
+                    document.getElementById('file-list').innerHTML =
+                        `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                });
+        }
+
+        function navigateTo(path) {
+            if (path !== currentPath) {
+                if (historyIndex < pathHistory.length - 1) {
+                    pathHistory = pathHistory.slice(0, historyIndex + 1);
+                }
+                pathHistory.push(path);
+                historyIndex = pathHistory.length - 1;
+                currentPath = path;
+                loadFileList(path);
+            }
+        }
+
+        //Update Path 
+        function updateBreadcrumb(path) {
+            const breadcrumb = document.getElementById('breadcrumb');
+            breadcrumb.innerHTML = '';
+
+            const parts = path.split('/').filter(part => part !== '');
+
+            // Root link
+            const rootItem = document.createElement('li');
+            rootItem.className = 'breadcrumb-item';
+            const rootLink = document.createElement('a');
+            rootLink.href = '#';
+            rootLink.textContent = 'Root';
+            rootLink.dataset.path = '/';
+            rootLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                navigateTo('/');
+            });
+            rootItem.appendChild(rootLink);
+            breadcrumb.appendChild(rootItem);
+
+            // Path parts
+            let currentPath = '';
+            parts.forEach((part, index) => {
+                currentPath += `/${part}`;
+
+                const item = document.createElement('li');
+                item.className = 'breadcrumb-item';
+
+                if (index === parts.length - 1) {
+                    item.className += ' active';
+                    item.textContent = part;
+                } else {
+                    const link = document.createElement('a');
+                    link.href = '#';
+                    link.textContent = part;
+                    link.dataset.path = currentPath;
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        navigateTo(currentPath);
+                    });
+                    item.appendChild(link);
+                }
+
+                breadcrumb.appendChild(item);
+            });
+        }
+
+        //Update Path static
+        function updatePathDisplay(path) {
+            document.getElementById('current-path-display').textContent = cleanPath(path);
+        }
+
+        function updateNavigationButtons() {
+            document.getElementById('btn-back').disabled = historyIndex <= 0;
+            document.getElementById('btn-up').disabled = currentPath === '/';
+        }
+
+        // Event listeners setup
+        function setupEventListeners() {
+            // Navigation
+            document.getElementById('btn-back').addEventListener('click', () => {
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    currentPath = pathHistory[historyIndex];
+                    loadFileList(currentPath);
+                }
+            });
+
+            document.getElementById('btn-up').addEventListener('click', () => {
+                if (currentPath !== '/') {
+                    const newPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+                    navigateTo(newPath === '' ? '/' : newPath);
+                }
+            });
+
+            // New Directory
+            document.getElementById('btn-new-folder').addEventListener('click', () => {
+                const modal = new bootstrap.Modal(document.getElementById('newFolderModal'));
+                document.getElementById('folder-name').value = '';
+                modal.show();
+            });
+
+            document.getElementById('btn-new-file').addEventListener('click', () => {
+                const modal = new bootstrap.Modal(document.getElementById('newFileModal'));
+                document.getElementById('file-name').value = '';
+                modal.show();
+            });
+
+            // Creation new Folder
+            document.getElementById('new-folder-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const folderName = document.getElementById('folder-name').value.trim();
+
+                if (folderName) {
+                    createNewFolder(folderName);
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('newFolderModal'));
+                    modal.hide();
+                }
+            });
+
+            // New File
+            document.getElementById('new-file-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const fileName = document.getElementById('file-name').value.trim();
+
+                if (fileName) {
+                    createNewFile(fileName);
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('newFileModal'));
+                    modal.hide();
+                }
+            });
+
+            // Delete
+            document.getElementById('btn-confirm-delete').addEventListener('click', () => {
+                if (selectedItem) {
+                    deleteItem(selectedItem);
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('confirmDeleteModal'));
+                    modal.hide();
+                }
+            });
+
+            // Edit and save
+            document.getElementById('btn-save-file').addEventListener('click', function () {
+                const path = this.dataset.path;
+                const content = document.getElementById('file-content').value;
+
+                const formData = new FormData();
+                formData.append('path', path);
+                formData.append('content', content);
+
+                fetch('/writefile', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.text().then(text => { throw new Error(text || 'Failed to save file') });
+                        }
+                        return response.text();
+                    })
+                    .then(message => {
+                        showToast(message);
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('editFileModal'));
+                        modal.hide();
+                    })
+                    .catch(error => {
+                        console.error('Error saving file:', error);
+                        showToast(`Error: ${error.message}`, 'error');
+                    });
+            });
+
+            // Rename
+            document.getElementById('rename-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const newName = document.getElementById('new-name').value.trim();
+
+                if (selectedItem && newName) {
+                    renameItem(selectedItem, newName);
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('renameModal'));
+                    modal.hide();
+                }
+            });
+
+            // Shutdown
+            document.getElementById('btn-shutdown').addEventListener('click', () => {
+                if (confirm('Are you sure you want to shutdown?')) {
+                    fetch('/shutdown', {
+                        method: 'POST'
+                    })
+                        .then(response => {
+                            if (response.ok) {
+                                showToast('Shutting down system...');
+                                setTimeout(() => {
+                                    window.close();
+                                }, 1000);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error shutting down:', error);
+                            showToast(`Error: ${error.message}`, 'error');
+                        });
+                }
+            });
+        }
+
+        // Context menu setup
+        function setupContextMenu() {
+            const contextMenu = document.getElementById('context-menu');
+
+            document.addEventListener('click', () => {
+                contextMenu.style.display = 'none';
+            });
+
+            document.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+
+                const fileItem = e.target.closest('.file-item');
+                const isEmptySpace = e.target.closest('#file-list') && !fileItem;
+
+                if (fileItem || isEmptySpace) {
+                    selectedItem = fileItem;
+
+                    document.getElementById('ctx-open').style.display =
+                        fileItem && fileItem.dataset.type === 'dir' ? 'flex' : 'none';
+                    document.getElementById('ctx-rename').style.display = fileItem ? 'flex' : 'none';
+                    document.getElementById('ctx-delete').style.display = fileItem ? 'flex' : 'none';
+                    document.getElementById('ctx-properties').style.display = fileItem ? 'flex' : 'none';
+                    document.getElementById('ctx-new-folder').style.display = isEmptySpace ? 'flex' : 'none';
+                    document.getElementById('ctx-new-file').style.display = isEmptySpace ? 'flex' : 'none';
+                    document.getElementById('ctx-download').style.display =
+                        fileItem && fileItem.dataset.type === 'file' ? 'flex' : 'none';
+                    document.getElementById('ctx-edit').style.display =
+                        fileItem && fileItem.dataset.type === 'file' ? 'flex' : 'none';
+                    document.getElementById('ctx-copy').style.display = fileItem ? 'flex' : 'none';
+                    document.getElementById('ctx-cut').style.display = fileItem ? 'flex' : 'none';
+                    document.getElementById('ctx-paste').style.display = clipboard ? 'flex' : 'none';
+
+                    contextMenu.style.left = `${e.pageX}px`;
+                    contextMenu.style.top = `${e.pageY}px`;
+                    contextMenu.style.display = 'block';
+                }
+            });
+
+            // Context menu handlers
+            document.getElementById('ctx-open').addEventListener('click', () => {
+                if (selectedItem && selectedItem.dataset.type === 'dir') {
+                    navigateTo(selectedItem.dataset.path);
+                }
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('ctx-rename').addEventListener('click', () => {
+                if (selectedItem) {
+                    const modal = new bootstrap.Modal(document.getElementById('renameModal'));
+                    document.getElementById('new-name').value = selectedItem.dataset.name;
+                    modal.show();
+                }
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('ctx-delete').addEventListener('click', () => {
+                if (selectedItem) {
+                    const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+                    modal.show();
+                }
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('ctx-properties').addEventListener('click', () => {
+                if (selectedItem) {
+                    showItemProperties(selectedItem);
+                }
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('ctx-new-folder').addEventListener('click', () => {
+                document.getElementById('btn-new-folder').click();
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('ctx-new-file').addEventListener('click', () => {
+                document.getElementById('btn-new-file').click();
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('ctx-download').addEventListener('click', () => {
+                if (selectedItem && selectedItem.dataset.type === 'file') {
+                    downloadFile(selectedItem);
+                }
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('ctx-edit').addEventListener('click', () => {
+                if (selectedItem && selectedItem.dataset.type === 'file') {
+                    openFileForEditing(selectedItem);
+                }
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('ctx-copy').addEventListener('click', () => {
+                if (selectedItem) {
+                    copyItem(selectedItem);
+                }
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('ctx-cut').addEventListener('click', () => {
+                if (selectedItem) {
+                    cutItem(selectedItem);
+                }
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('ctx-paste').addEventListener('click', () => {
+                pasteItem();
+                contextMenu.style.display = 'none';
+            });
+        }
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function () {
+            loadFileList(currentPath);
+            setupEventListeners();
+            setupContextMenu();
+        });
+
+    </script>
+</body>
+</html>
