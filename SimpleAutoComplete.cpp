@@ -43,15 +43,14 @@ int SimpleAutoComplete::Impl::getch() {
     char ch;
     ssize_t n = read(STDIN_FILENO, &ch, 1);
     if (n == 1) {
-        // فعل flushing آليًا لمخرجات std::cout مرة واحدة
-        // عشان طبعات readInput() تظهر فورًا عند كل حرف
+        // Automatically flush std::cout output once
+        // So that readInput() instances appear immediately for each character
         static bool unitbuf_set = false;
         if (!unitbuf_set) {
-            std::cout << std::unitbuf; // كل عملية << ستُفَضّ فوراً
+            std::cout << std::unitbuf; // Every transaction << will be terminated immediately
             unitbuf_set = true;
 }
-
-        // لا نطبع هنا (لمنع التكرار)، نرجع الحرف فقط
+        // We don't print here (to prevent duplication), we just return the character
         return static_cast<unsigned char>(ch);
     }
     return EOF;
@@ -118,10 +117,10 @@ void SimpleAutoComplete::Impl::clearSuggestions() {
     }
 }
 
-SimpleAutoComplete::SimpleAutoComplete(MiniHSFS& mini)
+SimpleAutoComplete::SimpleAutoComplete(MiniHSFS& mini, std::string& currentPath)
     : pimpl(std::make_unique<Impl>()) {
-    pimpl->getSuggestions = [this, &mini](const std::string& input) {
-        return this->getUnifiedSuggestions(input, mini);
+    pimpl->getSuggestions = [this, &mini, &currentPath](const std::string& input) {
+        return this->getUnifiedSuggestions(input, mini, currentPath);
         };
 }
 
@@ -239,14 +238,14 @@ std::string SimpleAutoComplete::getInput() const {
     return pimpl->inputValue;
 }
 
-std::vector<std::string> SimpleAutoComplete::getFileSystemSuggestions(const std::string& fullInput, MiniHSFS& mini) {
+std::vector<std::string> SimpleAutoComplete::getFileSystemSuggestions(const std::string& fullInput, MiniHSFS& mini, std::string& currentPath) {
     std::vector<std::string> suggestions;
 
     size_t lastSpace = fullInput.find_last_of(' ');
     std::string input = (lastSpace == std::string::npos) ? fullInput : fullInput.substr(lastSpace + 1);
 
     try {
-        int currentDir = mini.FindFile(run::currentPath);
+        int currentDir = mini.FindFile(currentPath);
         if (currentDir != -1 && mini.inodeTable[currentDir].isDirectory) {
             for (const auto& entry : mini.inodeTable[currentDir].entries) {
                 if (entry.first.find(input) == 0) {
@@ -277,7 +276,7 @@ std::vector<std::string> SimpleAutoComplete::getCommandSuggestions(const std::st
     return suggestions;
 }
 
-std::vector<std::string> SimpleAutoComplete::getUnifiedSuggestions(const std::string& fullInput, MiniHSFS& mini) {
+std::vector<std::string> SimpleAutoComplete::getUnifiedSuggestions(const std::string& fullInput, MiniHSFS& mini, std::string& currentPath) {
     std::vector<std::string> suggestions;
 
     bool suggestCommand = fullInput.empty() || fullInput.find(' ') == std::string::npos;
@@ -286,7 +285,7 @@ std::vector<std::string> SimpleAutoComplete::getUnifiedSuggestions(const std::st
         suggestions = getCommandSuggestions(fullInput);
     }
     else {
-        suggestions = getFileSystemSuggestions(fullInput, mini);
+        suggestions = getFileSystemSuggestions(fullInput, mini, currentPath);
     }
 
     return suggestions;

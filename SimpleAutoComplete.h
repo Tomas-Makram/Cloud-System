@@ -1,15 +1,5 @@
-﻿#pragma once
-#include <vector>
-#include <string>
-#include <functional>
-#include <memory>
-#include <iostream>
-#include <algorithm>
-#include <chrono>
-#include <iomanip>
-#include "MiniHSFS.h"
-#include "run.h"
-
+﻿#ifndef SIMPLEAUTOCOMPLETE_H
+#define SIMPLEAUTOCOMPLETE_H
 
 #ifdef _WIN32
 #include <conio.h>
@@ -20,6 +10,17 @@
 #include <sys/ioctl.h>
 #endif
 
+#include <vector>
+#include <string>
+#include <functional>
+#include <memory>
+#include <iostream>
+#include <algorithm>
+#include <chrono>
+#include <iomanip>
+
+#include "MiniHSFS.h"
+
 class SimpleAutoComplete {
 public:
 
@@ -27,12 +28,12 @@ public:
     const std::vector<std::string> builtInCommands = {
     "exit", "quit", "ls", "move", "mv", "write", "open", "read", "copy", "cp",
     "mkfile", "mf", "mkdir", "md", "tree", "info", "cd",
-    "redir", "refile", "rename", "rd", "del", "cls", "map", "AI" , "chatbot"
+    "redir", "refile", "rename", "rd", "del", "cls", "map", "AI" , "chatbot", "cloud"
     };
 
     using SuggestionsCallback = std::function<std::vector<std::string>(const std::string&)>;
 
-    SimpleAutoComplete(MiniHSFS& mini);
+    SimpleAutoComplete(MiniHSFS& mini, std::string& currentPath);
 
     ~SimpleAutoComplete();
 
@@ -78,7 +79,8 @@ private:
     void init(SuggestionsCallback callback);
 
     std::vector<std::string> getCommandSuggestions(const std::string& fullInput);
-    std::vector<std::string> getUnifiedSuggestions(const std::string& fullInput, MiniHSFS& mini);
-    std::vector<std::string> getFileSystemSuggestions(const std::string& fullInput, MiniHSFS& mini);
+    std::vector<std::string> getUnifiedSuggestions(const std::string& fullInput, MiniHSFS& mini, std::string& currentPath);
+    std::vector<std::string> getFileSystemSuggestions(const std::string& fullInput, MiniHSFS& mini, std::string& currentPath);
 
 };
+#endif

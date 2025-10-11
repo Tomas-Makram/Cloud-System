@@ -1,13 +1,14 @@
-﻿#include <string>
+﻿#ifndef TOKENIZER_H
+#define TOKENIZER_H
+
+#include <string>
 #include <ostream>
 #include <vector>
 #include <memory>
 #include <sstream>
 #include <iostream>
 #include <limits>
-#include "MiniHSFS.h"
 #include "Parser.h"
-#include "run.h"
 
 enum class ProcessState { Ready, Running, Pause, Terminated };
 
@@ -16,14 +17,13 @@ class Tokenizer {
 public:
 
 	//Constracter
-	Tokenizer(std::string username, std::string dirname, std::string password, int strongPassword);
-
+	Tokenizer(std::string username, std::string dirname, std::string password, std::string email, size_t strongPassword, size_t totalSize);
 	//Run Commands
-	void processCommand(const std::string& command, MiniHSFS& mini);
+	void processCommand(const std::string& command, MiniHSFS& mini, std::string& currentPath, std::string& password);
 
 	// Process management functions
 	int createProcess(const std::string& name, const std::vector<std::string>& args);
-	void runAll(MiniHSFS& mini);
+	void runAll(MiniHSFS& mini, std::string& currentPath, std::string& password);
 
 	//Search PID Process
 	bool isRunning(int pid) const;
@@ -42,7 +42,7 @@ private:
 	std::vector<std::string> ParseArguments(const std::string& input);
 
 	//Send Commant to Parser
-	void handleCommand(const std::vector<std::string>& args, MiniHSFS& mini);
+	void handleCommand(const std::vector<std::string>& args, MiniHSFS& mini, std::string& currentPath, std::string& password);
 
 	// Process related members
 	struct Process {
@@ -61,5 +61,4 @@ private:
 	//Processing Table
 	std::vector<Process> processTable;
 };
-
-#pragma once
+#endif

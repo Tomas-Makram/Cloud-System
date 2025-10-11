@@ -1,17 +1,32 @@
 ﻿#include "Parser.h"
 
 // Initialization
-Parser::Parser(std::string username, std::string dirname, std::string password, int strongPassword) :fsAI(nullptr) {
-    this->username = username;
-    this->dirname = dirname;
-    this->password = password;
-    this->strongPassword = strongPassword;
+Parser::Parser(std::string username, std::string dirname, std::string password, std::string email,size_t strongPassword,size_t totalSize) :fsAI(nullptr) {
+    this->myAccount.username = username;
+    this->myAccount.email = email;
+    this->myAccount.dirname = dirname;
+    this->myAccount.password = password;
+    this->myAccount.strongPassword = strongPassword;
+    this->myAccount.totalSize = totalSize;
 }
 
 Parser::~Parser() {
     if (fsAI != nullptr) {
         delete fsAI;
     }
+}
+
+void Parser::SetAccount(std::string username, std::string dirname, std::string password, std::string email, size_t strongPassword, size_t totalSize) {
+    this->myAccount.username = username != "" ? username : this->myAccount.username;
+    this->myAccount.email = email != "" ? email : this->myAccount.email;
+    this->myAccount.dirname = dirname != "" ? dirname : this->myAccount.dirname;
+    this->myAccount.password = password != "" ? password : this->myAccount.password;
+    this->myAccount.strongPassword = strongPassword != 0 ? strongPassword : this->myAccount.strongPassword;
+    this->myAccount.totalSize = totalSize != 0 ? totalSize : this->myAccount.totalSize;
+}
+
+Parser::account Parser::GetAccount(){
+    return this->myAccount;
 }
 
 void Parser::initializeAI(MiniHSFS& mini) {
@@ -27,7 +42,7 @@ bool Parser::createAccount(MiniHSFS& mini) {
     if (!mini.mounted) throw std::runtime_error("Filesystem not mounted");
 
     // Make sure the name does not already exist
-    if (mini.inodeTable[mini.rootNodeIndex].entries.count(run::DirName) > 0) {
+    if (mini.inodeTable[mini.rootNodeIndex].entries.count(this->myAccount.dirname) > 0) {
         throw std::runtime_error("User already exists");
     }
 
@@ -47,15 +62,15 @@ bool Parser::createAccount(MiniHSFS& mini) {
     inode.isDirty = true;
 
     // Fill in account information
-    inode.inodeInfo.UserName = run::UserName;
+    inode.inodeInfo.UserName = this->myAccount.username;
     CryptoUtils crypto;
-    inode.inodeInfo.Password = crypto.CreatePassword(run::Password, run::strongPassword);
-    inode.inodeInfo.Email = run::Email;
-    inode.inodeInfo.TotalSize = run::TotalSize;
+    inode.inodeInfo.Password = crypto.CreatePassword(this->myAccount.password, this->myAccount.strongPassword);
+    inode.inodeInfo.Email = this->myAccount.email;
+    inode.inodeInfo.TotalSize = this->myAccount.totalSize;
     inode.inodeInfo.Usage = 0;
 
     // Add to root folder
-    mini.inodeTable[0].entries[run::DirName] = userInode;
+    mini.inodeTable[0].entries[this->myAccount.dirname] = userInode;
     mini.inodeTable[0].isDirty = true;
 
     // Save
@@ -63,7 +78,7 @@ bool Parser::createAccount(MiniHSFS& mini) {
     mini.SaveInodeToDisk(0);
 
     mini.Disk().SetConsoleColor(mini.Disk().Green);
-    std::cout << "Account created for user: " << run::DirName << std::endl;
+    std::cout << "Account created for user: " << this->myAccount.dirname << std::endl;
     mini.Disk().SetConsoleColor(mini.Disk().Default);
     return true;
 }
@@ -76,20 +91,20 @@ void Parser::GetInfo(MiniHSFS& mini, int index)
         << mini.inodeTable[index].inodeInfo.Usage << '\n';
 }
 
-int Parser::checkingAccount(MiniHSFS& mini, size_t dataSize, bool read)
+int Parser::checkingAccount(MiniHSFS& mini, size_t dataSize, bool read, std::string currentPath)
 {
     CryptoUtils crypto;
 
-    if (mini.inodeTable[mini.rootNodeIndex].entries.count(this->dirname) == 1)
+    if (mini.inodeTable[mini.rootNodeIndex].entries.count(this->myAccount.dirname) == 1)
     {
-        int indexpath = mini.PathToInode(mini.SplitPath("/" + this->dirname));
+        int indexpath = mini.PathToInode(mini.SplitPath("/" + this->myAccount.dirname));
 
-        std::vector<std::string> realPath = mini.SplitPath(run::currentPath);
+        std::vector<std::string> realPath = mini.SplitPath(currentPath);
 
-        if (!((realPath.size() >= 1) && (run::currentPath[0] == '/' && realPath[0] == this->dirname)))
+        if (!((realPath.size() >= 1) && (currentPath[0] == '/' && realPath[0] == this->myAccount.dirname)))
             throw std::runtime_error("Permission denied: not the owner of the target directory");
 
-        if (!(mini.inodeTable[indexpath].inodeInfo.UserName == this->username && crypto.ValidatePassword(password, mini.inodeTable[indexpath].inodeInfo.Password, this->strongPassword)))
+        if (!(mini.inodeTable[indexpath].inodeInfo.UserName == this->myAccount.username && crypto.ValidatePassword(this->myAccount.password, mini.inodeTable[indexpath].inodeInfo.Password, this->myAccount.strongPassword)))
             throw std::runtime_error("Unvalid Account");
 
         if(!read)
@@ -104,21 +119,21 @@ int Parser::checkingAccount(MiniHSFS& mini, size_t dataSize, bool read)
     return -1;
 }
 
-void Parser::ChangeInfo(MiniHSFS& mini, std::string email, std::string password,std::string username)
+void Parser::ChangeInfo(MiniHSFS& mini, std::string email, std::string password, std::string username, std::string currentPath)
 {
     if (!mini.mounted)
         throw std::runtime_error("Filesystem not mounted");
-    int index = checkingAccount(mini,0,true);
+    int index = checkingAccount(mini, 0, true, currentPath);
 
     CryptoUtils crypto;
 
     mini.inodeTable[index].inodeInfo.Email = email.empty() ? mini.inodeTable[index].inodeInfo.Email : email;
     mini.inodeTable[index].inodeInfo.UserName = username.empty() ? mini.inodeTable[index].inodeInfo.UserName : username;
-    mini.inodeTable[index].inodeInfo.Password = password.empty() ? mini.inodeTable[index].inodeInfo.Password : crypto.CreatePassword(password,run::strongPassword);
+    mini.inodeTable[index].inodeInfo.Password = password.empty() ? mini.inodeTable[index].inodeInfo.Password : crypto.CreatePassword(password, this->myAccount.strongPassword);
 
-    run::UserName = mini.inodeTable[index].inodeInfo.UserName;
-    run::Email = mini.inodeTable[index].inodeInfo.Email;
-    run::Password = std::string(mini.inodeTable[index].inodeInfo.Password.begin(), mini.inodeTable[index].inodeInfo.Password.end());
+    this->myAccount.username = mini.inodeTable[index].inodeInfo.UserName;
+    this->myAccount.email = mini.inodeTable[index].inodeInfo.Email;
+    this->myAccount.password = std::string(mini.inodeTable[index].inodeInfo.Password.begin(), mini.inodeTable[index].inodeInfo.Password.end());
 
     mini.SaveInodeToDisk(index);
     mini.Disk().SetConsoleColor(mini.Disk().Green);
@@ -128,7 +143,7 @@ void Parser::ChangeInfo(MiniHSFS& mini, std::string email, std::string password,
 }
 
 // Basic Operations
-void Parser::cd(const std::string& path, MiniHSFS& mini) {
+void Parser::cd(const std::string& path, MiniHSFS& mini, std::string& currentPath) {
 
     if (!mini.mounted) {
         mini.Disk().SetConsoleColor(mini.Disk().Red);
@@ -147,7 +162,7 @@ void Parser::cd(const std::string& path, MiniHSFS& mini) {
         combinedPath = path;
     }
     else {
-        combinedPath = run::currentPath;
+        combinedPath = currentPath;
         if (combinedPath.back() != '/') {
             combinedPath += "/";
         }
@@ -185,7 +200,7 @@ void Parser::cd(const std::string& path, MiniHSFS& mini) {
     }
 
     // Check if we are already in "/" and try to go back
-    if (newPath == "/" && run::currentPath == "/") {
+    if (newPath == "/" && currentPath == "/") {
         mini.Disk().SetConsoleColor(mini.Disk().Gray);
         std::cout << "You are already in the root directory" << std::endl;
         mini.Disk().SetConsoleColor(mini.Disk().Default);
@@ -203,7 +218,7 @@ void Parser::cd(const std::string& path, MiniHSFS& mini) {
             mini.Disk().SetConsoleColor(mini.Disk().Default);
         }
 
-        run::currentPath = newPath;
+        currentPath = newPath;
     }
     catch (const std::exception& ex) {
         throw std::runtime_error(ex.what());
@@ -212,7 +227,7 @@ void Parser::cd(const std::string& path, MiniHSFS& mini) {
     fsAI->analyzeAccessPattern(path.empty() ? "/" : path);
 }
 
-MiniHSFS::Inode& Parser::getDirectoryItems(const std::string& path, MiniHSFS& mini) {
+MiniHSFS::Inode& Parser::getDirectoryItems(const std::string& path, MiniHSFS& mini, std::string& currentPath) {
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
     if (!mini.mounted) {
@@ -221,7 +236,7 @@ MiniHSFS::Inode& Parser::getDirectoryItems(const std::string& path, MiniHSFS& mi
         mini.Disk().SetConsoleColor(mini.Disk().Default);
     }
 
-    checkingAccount(mini, 0, true);
+    checkingAccount(mini, 0, true, currentPath);
 
     mini.ValidatePath(path);
 
@@ -247,26 +262,24 @@ MiniHSFS::Inode& Parser::getDirectoryItems(const std::string& path, MiniHSFS& mi
     return dirInode;
 }
 
-void Parser::printFileSystemInfo(MiniHSFS& mini)
-{
-    GetInfo(mini, checkingAccount(mini, 0, true));
+void Parser::printFileSystemInfo(MiniHSFS& mini, std::string& currentPath){
+    GetInfo(mini, checkingAccount(mini, 0, true, currentPath));
     //    mini.PrintSuperblockInfo();
 }
 
-void Parser::PrintBTreeStructure(MiniHSFS& mini)
-{
-    checkingAccount(mini, 0, true);
+void Parser::PrintBTreeStructure(MiniHSFS& mini, std::string& currentPath){
+    checkingAccount(mini, 0, true, currentPath);
     mini.PrintBTreeStructure();
 }
 
-void Parser::ls(const std::string& input, MiniHSFS& mini) {
+void Parser::ls(const std::string& input, MiniHSFS& mini, std::string& currentPath) {
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
     if (!mini.mounted) 
         throw std::runtime_error("Filesystem not mounted");
     initializeAI(mini);
 
-    checkingAccount(mini, 0, true);
+    checkingAccount(mini, 0, true, currentPath);
 
     // Parse command options
     bool showInodeInfo = false;
@@ -307,7 +320,7 @@ void Parser::ls(const std::string& input, MiniHSFS& mini) {
         target = tokens[1];
     else
         target = path.empty() ?
-        (run::currentPath.empty() ? "/" : run::currentPath) :
+        (currentPath.empty() ? "/" : currentPath) :
         path;
 
     // Validate and get inode
@@ -340,7 +353,7 @@ void Parser::ls(const std::string& input, MiniHSFS& mini) {
         printFileInfo(targetInode, target, longFormat, mini);
     }
     // AI Enhancement: Predict next files after listing
-    predictNextAccess(mini);
+    predictNextAccess(mini, currentPath);
 }
 
 void Parser::printDirectoryContents(int dirInode, const std::string& path, bool longFormat, bool showHidden, bool recursive, const std::string& indent, bool isLast, MiniHSFS& mini)
@@ -714,7 +727,7 @@ void Parser::printInodeInfo(int inodeNum, const std::string& path, bool longForm
 
 }
 
-bool Parser::createDirectory(const std::string path, const std::string name, MiniHSFS& mini) {
+bool Parser::createDirectory(const std::string path, const std::string name, MiniHSFS& mini, std::string& currentPath) {
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
     if (!mini.mounted) {
@@ -722,7 +735,7 @@ bool Parser::createDirectory(const std::string path, const std::string name, Min
     }
 
     //Verify account validity
-    int ownerInode = checkingAccount(mini);
+    int ownerInode = checkingAccount(mini, 0, false, currentPath);
 
     // Build the full path
     std::string fullPath = path;
@@ -778,7 +791,7 @@ bool Parser::createDirectory(const std::string path, const std::string name, Min
     newDir.modificationTime = newDir.creationTime;
     newDir.lastAccessed = newDir.creationTime;
     newDir.isDirty = true;
-    newDir.inodeInfo.UserName = run::UserName;
+    newDir.inodeInfo.UserName = this->myAccount.username;
 
     // Add to parent folder
     mini.inodeTable[parentInode].entries[dirname] = newInode;
@@ -814,7 +827,7 @@ bool Parser::createDirectory(const std::string path, const std::string name, Min
     }
 }
 
-int Parser::createFile(const std::string& path, const std::string name, MiniHSFS& mini) {
+int Parser::createFile(const std::string& path, const std::string name, MiniHSFS& mini, std::string& currentPath) {
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
     if (!mini.mounted) {
@@ -822,7 +835,7 @@ int Parser::createFile(const std::string& path, const std::string name, MiniHSFS
     }
 
     // Account Verification
-    int ownerInode = checkingAccount(mini);
+    int ownerInode = checkingAccount(mini, 0, false, currentPath);
 
     // Build the full path
     std::string fullPath = path;
@@ -917,7 +930,7 @@ int Parser::createFile(const std::string& path, const std::string name, MiniHSFS
     }
 }
 
-bool Parser::deleteDirectory(const std::string& path, MiniHSFS& mini) {
+bool Parser::deleteDirectory(const std::string& path, MiniHSFS& mini,std::string& currentPath) {
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
     if (!mini.mounted) {
@@ -925,7 +938,7 @@ bool Parser::deleteDirectory(const std::string& path, MiniHSFS& mini) {
     }
 
     // Verify account
-    int ownerInode = checkingAccount(mini, 0, true);
+    int ownerInode = checkingAccount(mini, 0, true, currentPath);
 
     mini.ValidatePath(path);
 
@@ -971,10 +984,10 @@ bool Parser::deleteDirectory(const std::string& path, MiniHSFS& mini) {
             std::string childPath = path + (path == "/" ? "" : "/") + entry.first;
             if (entry.second < static_cast<int>(mini.inodeTable.size())) {
                 if (mini.inodeTable[entry.second].isDirectory) {
-                    deleteDirectory(childPath, mini);
+                    deleteDirectory(childPath, mini,currentPath);
                 }
                 else {
-                    deleteFile(childPath, mini);
+                    deleteFile(childPath, mini, currentPath);
                 }
             }
         }
@@ -1033,7 +1046,7 @@ bool Parser::deleteDirectory(const std::string& path, MiniHSFS& mini) {
     }
 }
 
-bool Parser::deleteFile(const std::string& path, MiniHSFS& mini) {
+bool Parser::deleteFile(const std::string& path, MiniHSFS& mini, std::string& currentPath) {
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
     if (!mini.mounted) {
@@ -1041,7 +1054,7 @@ bool Parser::deleteFile(const std::string& path, MiniHSFS& mini) {
     }
 
     // Verify account
-    int ownerInode = checkingAccount(mini, 0, true);
+    int ownerInode = checkingAccount(mini, 0, true, currentPath);
 
     mini.ValidatePath(path);
 
@@ -1125,14 +1138,14 @@ bool Parser::deleteFile(const std::string& path, MiniHSFS& mini) {
     }
 }
 
-std::vector<char> Parser::readFile(const std::string& path, MiniHSFS& mini, size_t maxChunkSize, bool showProgress, const std::string& password) {
+std::vector<char> Parser::readFile(const std::string& path, MiniHSFS& mini, size_t maxChunkSize, bool showProgress, const std::string& password, std::string currentPath) {
 
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
     if (!mini.mounted)
         throw std::runtime_error("Filesystem not mounted");
 
-    int indexpath = checkingAccount(mini, 0, true);
+    int indexpath = checkingAccount(mini, 0, true, currentPath);
 
     mini.ValidatePath(path);
 
@@ -1158,7 +1171,7 @@ std::vector<char> Parser::readFile(const std::string& path, MiniHSFS& mini, size
     return result;
 }
 
-bool Parser::writeFile(const std::string& path, const std::vector<char>& data, MiniHSFS& mini, bool append, const std::string& password) {
+bool Parser::writeFile(const std::string& path, const std::vector<char>& data, MiniHSFS& mini, bool append, const std::string& password, std::string currentPath) {
 
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
@@ -1173,7 +1186,7 @@ bool Parser::writeFile(const std::string& path, const std::vector<char>& data, M
     size_t encryptedOverhead = password.empty() ? 0 : crypto.ExtraSize();
     size_t totalSizeNeeded = dataSize + encryptedOverhead;
 
-    int ownerInode = checkingAccount(mini, totalSizeNeeded);
+    int ownerInode = checkingAccount(mini, totalSizeNeeded, false, currentPath);
 
     mini.ValidatePath(path);
 
@@ -1302,7 +1315,7 @@ bool Parser::writeFile(const std::string& path, const std::vector<char>& data, M
     }
 }
 
-bool Parser::rename(const std::string& oldPath, const std::string& newName, MiniHSFS& mini) {
+bool Parser::rename(const std::string& oldPath, const std::string& newName, MiniHSFS& mini, std::string& currentPath) {
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
     if (!mini.mounted)
@@ -1312,7 +1325,7 @@ bool Parser::rename(const std::string& oldPath, const std::string& newName, Mini
         mini.Disk().SetConsoleColor(mini.Disk().Default);
     }
 
-    checkingAccount(mini, 0, true);
+    checkingAccount(mini, 0, true, currentPath);
 
     mini.ValidatePath(oldPath);
 
@@ -1369,7 +1382,7 @@ bool Parser::rename(const std::string& oldPath, const std::string& newName, Mini
     return true;
 }
 
-bool Parser::move(const std::string& srcPath, const std::string& destPath, MiniHSFS& mini) {
+bool Parser::move(const std::string& srcPath, const std::string& destPath, MiniHSFS& mini, std::string& currentPath) {
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
     if (!mini.mounted)
@@ -1391,7 +1404,7 @@ bool Parser::move(const std::string& srcPath, const std::string& destPath, MiniH
     }
 
 
-    checkingAccount(mini, mini.inodeTable[srcInode].size);
+    checkingAccount(mini, mini.inodeTable[srcInode].size, false, currentPath);
 
 
     int destInode = mini.FindFile(destPath);
@@ -1406,14 +1419,14 @@ bool Parser::move(const std::string& srcPath, const std::string& destPath, MiniH
     if (mini.inodeTable[srcInode].isDirectory) {
         // Create a new folder in the destination with the same name
         std::string newFolderPath = destPath + "/" + name;
-        createDirectory(destPath + "/", name, mini);
+        createDirectory(destPath + "/", name, mini, currentPath);
 
         for (const auto& entry : mini.inodeTable[srcInode].entries) {
             const std::string childSrcPath = srcPath + "/" + entry.first;
-            move(childSrcPath, newFolderPath, mini); // Move elements internally recursive
+            move(childSrcPath, newFolderPath, mini, currentPath); // Move elements internally recursive
         }
 
-        deleteDirectory(srcPath, mini);
+        deleteDirectory(srcPath, mini, currentPath);
     }
     else {
         // Just move the file
@@ -1436,7 +1449,7 @@ bool Parser::move(const std::string& srcPath, const std::string& destPath, MiniH
     return true;
 }
 
-bool Parser::copy(const std::string& srcPath, const std::string& destPath, MiniHSFS& mini) {
+bool Parser::copy(const std::string& srcPath, const std::string& destPath, MiniHSFS& mini,std::string& currentPath) {
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
 
     if (!mini.mounted)
@@ -1471,11 +1484,11 @@ bool Parser::copy(const std::string& srcPath, const std::string& destPath, MiniH
     if (mini.inodeTable[srcInode].isDirectory) {
         // Create a folder at the destination
         std::string newFolderPath = destPath + "/" + name;
-        createDirectory(destPath + "/", name, mini);
+        createDirectory(destPath + "/", name, mini, currentPath);
 
         for (const auto& entry : mini.inodeTable[srcInode].entries) {
             std::string childSrcPath = srcPath + "/" + entry.first;
-            copy(childSrcPath, newFolderPath, mini);
+            copy(childSrcPath, newFolderPath, mini, currentPath);
         }
     }
     else {
@@ -1493,7 +1506,7 @@ bool Parser::copy(const std::string& srcPath, const std::string& destPath, MiniH
         }
 
         // Actual copy
-        createFile(destPath + "/", name, mini);
+        createFile(destPath + "/", name, mini, currentPath);
         writeFile(destPath + "/" + name, content, mini);
     }
 
@@ -1508,8 +1521,8 @@ void Parser::cls() {
 #endif
 }
 
-void Parser::printBitmap(MiniHSFS& mini) {
-    checkingAccount(mini, 0, true);
+void Parser::printBitmap(MiniHSFS& mini, std::string& currentPath) {
+    checkingAccount(mini, 0, true, currentPath);
     mini.Disk().printBitmap();
 }
 
@@ -1517,6 +1530,21 @@ void Parser::exit(MiniHSFS& mini) {
     mini.Disk().SetConsoleColor(mini.Disk().Green);
     std::cout << "Bye :)" << std::endl;
     mini.Disk().SetConsoleColor(mini.Disk().Default);
+}
+
+void Parser::Network(MiniHSFS& mini)
+{
+    //run::currentPath = run::currentPath + run::DirName; //Get Current Directory
+
+    //Cloud cloud;
+    //std::string ip = cloud.getIPfromIpconfig();
+    //std::cout << "Local IP: " << "http://" << ip << ":8081" << '\n';
+
+    //httplib::Server svr;
+    //cloud.setupRoutes(svr, this, mini, token);
+    //std::cout << "Server is running at http://localhost:8081" << '\n';
+    //svr.listen("0.0.0.0", 8081);
+
 }
 
 // AI Analysis Functions
@@ -1560,11 +1588,11 @@ void Parser::analyzeStorage(MiniHSFS& mini) {
         << "%\n";
 }
 
-void Parser::predictNextAccess(MiniHSFS& mini) {
+void Parser::predictNextAccess(MiniHSFS& mini, std::string& currentPath) {
     initializeAI(mini);
 
     std::vector<std::string> predicted_files = fsAI->predictNextFiles(
-        run::currentPath.empty() ? "/" : run::currentPath
+        currentPath.empty() ? "/" : currentPath
     );
 
     if (!predicted_files.empty()) {

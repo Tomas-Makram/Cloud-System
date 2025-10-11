@@ -1,8 +1,8 @@
 ﻿#include "Tokenizer.h"
 
 //Constracter
-Tokenizer::Tokenizer(std::string username, std::string dirname, std::string password, int strongPassword)
-    : parse(username, dirname, password, strongPassword) {}
+Tokenizer::Tokenizer(std::string username, std::string dirname, std::string password, std::string email, size_t strongPassword, size_t totalSize)
+    : parse(username, dirname, password, email,strongPassword, totalSize) {}
 
 
 //Split '," Commands
@@ -36,14 +36,14 @@ std::vector<std::string> Tokenizer::ParseArguments(const std::string& input) {
 }
 
 //Command Line
-void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mini) {
+void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mini,std::string& currentPath, std::string& password) {
 
     if (args.empty() || !isReady(nextPid - 1)) return;
    
     findProcess(nextPid - 1)->state = ProcessState::Running;
 
     if (args[0] == "cd")
-        parse.cd(args.size() == 1 ? "/" : args[1], mini);
+        parse.cd(args.size() == 1 ? "/" : args[1], mini, currentPath);
 
     else if (args[0] == "ls") {
         std::string options;
@@ -68,42 +68,44 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
             argument += path;
         }
 
-        parse.ls(argument, mini);
+        parse.ls(argument, mini, currentPath);
     }
 
     else if (args[0] == "info")
-        parse.printFileSystemInfo(mini);
+        parse.printFileSystemInfo(mini, currentPath);
+    else if (args[0] == "cloud");
+    //        parse.Network(mini);
 
     else if (args[0] == "tree")
-        parse.PrintBTreeStructure(mini);
+        parse.PrintBTreeStructure(mini, currentPath);
 
     else if ((args[0] == "mkdir" && args.size() > 1) || (args[0] == "md" && args.size() > 1))
         for (int x = 1; x < args.size(); x++)
-            parse.createDirectory((args[x][0] != '/' ? run::currentPath + (run::currentPath != "/" ? "/" : "") : args[x]), (args[x][0] != '/' ? args[x] : ""), mini);
+            parse.createDirectory((args[x][0] != '/' ? currentPath + (currentPath != "/" ? "/" : "") : args[x]), (args[x][0] != '/' ? args[x] : ""), mini, currentPath);
 
     else if ((args[0] == "mkfile" && args.size() > 1) || ((args[0] == "mf" && args.size() > 1)))
         for (int x = 1; x < args.size(); x++)
-            parse.createFile((args[1][0] == '/' ? "" : run::currentPath + (run::currentPath != "/" ? "/" : "")), args[x], mini);
+            parse.createFile((args[1][0] == '/' ? "" : currentPath + (currentPath != "/" ? "/" : "")), args[x], mini, currentPath);
 
     else if ((args[0] == "redir" && args.size() == 3) || (args[0] == "refile" && args.size() == 3) || (args[0] == "rename" && args.size() == 3))
-        parse.rename(args[1][0] == '/' ? args[1] : run::currentPath + (run::currentPath != "/" ? "/" : "") + args[1], args[2], mini);
+        parse.rename(args[1][0] == '/' ? args[1] : currentPath + (currentPath != "/" ? "/" : "") + args[1], args[2], mini, currentPath);
 
     else if (args[0] == "rd" && args.size() > 1)
         for (int x = 1; x < args.size(); x++)
-            parse.deleteDirectory(args[x][0] != '/' ? run::currentPath + (run::currentPath != "/" ? "/" : "") + args[x] : args[x], mini);
+            parse.deleteDirectory(args[x][0] != '/' ? currentPath + (currentPath != "/" ? "/" : "") + args[x] : args[x], mini, currentPath);
 
     else if (args[0] == "del" && args.size() > 1)
         for (int x = 1; x < args.size(); x++)
-            parse.deleteFile(args[x][0] != '/' ? run::currentPath + (run::currentPath != "/" ? "/" : "") + args[x] : args[x], mini);
+            parse.deleteFile(args[x][0] != '/' ? currentPath + (currentPath != "/" ? "/" : "") + args[x] : args[x], mini, currentPath);
 
     else if (args[0] == "open" && args.size() > 1) {
         for (size_t i = 1; i < args.size(); i++) {
             std::string full_path = (args[i][0] != '/')
-                ? run::currentPath + (run::currentPath != "/" ? "/" : "") + args[i]
+                ? currentPath + (currentPath != "/" ? "/" : "") + args[i]
                 : args[i];
 
             try {
-                std::vector<char> data = parse.readFile(full_path, mini, 0, true, run::Password);
+                std::vector<char> data = parse.readFile(full_path, mini, 0, true, password);
                 std::string str(data.begin(), data.end());
                 std::cout << "File content:\n" << str << std::endl;
             }
@@ -247,11 +249,11 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
         //std::vector<char> data(str.begin(), str.end());
 
         std::string full_path = (args[1][0] != '/')
-            ? run::currentPath + (run::currentPath != "/" ? "/" : "") + args[1]
+            ? currentPath + (currentPath != "/" ? "/" : "") + args[1]
             : args[1];
 
         try {
-            if (parse.writeFile(full_path, data, mini, false, run::Password)) {
+            if (parse.writeFile(full_path, data, mini, false, password)) {
                 std::cout << "File written successfully" << std::endl;
             }
             else {
@@ -310,20 +312,20 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
     else if (args[0] == "move" && args.size() == 3)
     {
         if (args[1][0] != '/' && args[2][0] != '/')
-            parse.move(run::currentPath + (run::currentPath != "/" ? "/" : "") + args[1], run::currentPath + (run::currentPath != "/" ? "/" : "") + args[2], mini);
+            parse.move(currentPath + (currentPath != "/" ? "/" : "") + args[1], currentPath + (currentPath != "/" ? "/" : "") + args[2], mini, currentPath);
         else if (args[1][0] == '/' && args[2][0] != '/')
-            parse.move(args[1], run::currentPath + (run::currentPath != "/" ? "/" : "") + args[2], mini);
+            parse.move(args[1], currentPath + (currentPath != "/" ? "/" : "") + args[2], mini, currentPath);
         else if (args[1][0] != '/' && args[2][0] == '/')
-            parse.move(run::currentPath + (run::currentPath != "/" ? "/" : "") + args[1], args[2], mini);
+            parse.move(currentPath + (currentPath != "/" ? "/" : "") + args[1], args[2], mini, currentPath);
         else
-            parse.move(args[1], args[2], mini);
+            parse.move(args[1], args[2], mini, currentPath);
     }
 
 
     else if ((args[0] == "copy" || args[0] == "cp") && args.size() == 3) {
-        std::string src = args[1][0] == '/' ? args[1] : run::currentPath + (run::currentPath != "/" ? "/" : "") + args[1];
-        std::string dest = args[2][0] == '/' ? args[2] : run::currentPath + (run::currentPath != "/" ? "/" : "") + args[2];
-        parse.copy(src, dest, mini);
+        std::string src = args[1][0] == '/' ? args[1] : currentPath + (currentPath != "/" ? "/" : "") + args[1];
+        std::string dest = args[2][0] == '/' ? args[2] : currentPath + (currentPath != "/" ? "/" : "") + args[2];
+        parse.copy(src, dest, mini, currentPath);
     }
 
     //AI
@@ -337,22 +339,22 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
 
     else if (args[0] == "AI")
     {
-        std::string paths = args[1][0] == '/' ? args[1] : run::currentPath + '/' + args[1];
+        std::string paths = args[1][0] == '/' ? args[1] : currentPath + '/' + args[1];
 
         std::cout << "Analysis Storage : " << std::endl;
         parse.analyzeStorage(mini);
 
         std::cout << "Analysis Next Access : " << std::endl;
-        parse.predictNextAccess(mini);
+        parse.predictNextAccess(mini, currentPath);
 
         std::cout << "Analysis Optimize File Placement : " << std::endl;
         parse.optimizeFilePlacement(paths,mini);
 
         std::cout << "Analysis Check Security : " << std::endl;
-        parse.checkSecurity(args[0], paths, mini, run::Password);
+        parse.checkSecurity(args[0], paths, mini, password);
 
         std::cout << "Analysis Check Security : " << std::endl;
-        parse.checkSecurity(args[0], paths, mini, run::Password);
+        parse.checkSecurity(args[0], paths, mini, password);
 
     }
 
@@ -360,7 +362,7 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
         parse.cls();
 
     else if (args[0] == "map" && args.size() == 1)
-        parse.printBitmap(mini);
+        parse.printBitmap(mini, currentPath);
 
     else if (args[0] == "exit")
         parse.exit(mini);
@@ -370,7 +372,7 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
 }
 
 //Generate Command Line after parse argument
-void Tokenizer::processCommand(const std::string& command, MiniHSFS& mini) {
+void Tokenizer::processCommand(const std::string& command, MiniHSFS& mini, std::string& currentPath, std::string& password) {
     auto args = ParseArguments(command);
 
     if (args.empty())return;
@@ -379,7 +381,7 @@ void Tokenizer::processCommand(const std::string& command, MiniHSFS& mini) {
 
     try {
         // Execute the actual command
-        handleCommand(args, mini);
+        handleCommand(args, mini, currentPath, password);
         processTable.back().state = ProcessState::Terminated;
     }
     catch (const std::exception& e) {
@@ -395,12 +397,12 @@ int Tokenizer::createProcess(const std::string& name, const std::vector<std::str
     return nextPid - 1;
 }
 
-void Tokenizer::runAll(MiniHSFS& mini) {
+void Tokenizer::runAll(MiniHSFS& mini, std::string& currentPath, std::string& password) {
     for (auto& p : processTable) {
         if (p.state == ProcessState::Ready || p.state == ProcessState::Pause) {
             p.state = ProcessState::Running;
             std::cout << "\n[Running PID " << p.pid << "]: " << p.name << "\n";
-            processCommand(p.name, mini);
+            processCommand(p.name, mini, currentPath, password);
             p.state = ProcessState::Terminated;
         }
     }

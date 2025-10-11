@@ -138,7 +138,7 @@ Cloud::auth Cloud::authenticateUser(const httplib::Request& req) {
     return user;
 }
 
-void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tokenizer& tokenizer) {
+void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tokenizer& tokenizer, std::string& currentPath, std::string& password) {
 
     // Main authentication page
     svr.Get("/", [this](const httplib::Request& req, httplib::Response& res) {
@@ -438,7 +438,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
 
         // إنشاء مجلد المستخدم في نظام الملفات
         try {
-            parse.createDirectory("/home", username, mini);
+            parse.createDirectory("/home", username, mini, currentPath);
             res.set_content("تم إنشاء الحساب بنجاح", "text/plain");
         }
         catch (const std::exception& e) {
@@ -470,7 +470,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
         });
 
     // Main user interface
-    svr.Get("/files", [this, &parse, &mini](const httplib::Request& req, httplib::Response& res) {
+    svr.Get("/files", [this, &parse, &mini, &currentPath](const httplib::Request& req, httplib::Response& res) {
 
         auto user = checkSession(req);
         if (user.username.empty()) {
@@ -495,13 +495,13 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
             if (!req.get_param_value("path").empty()) {
 
                 // This is a request for file data
-                parse = Parser(user.username, user.dirname, user.password, user.strongPassword);
+                parse.SetAccount(user.username, user.dirname, user.password, user.email, user.strongPassword, mini.inodeTable[user.index].inodeInfo.TotalSize);
 
 
                 if (!(parts.size() > 0 && req.get_param_value("path")[0] == '/' && parts[0] == user.dirname))
                     path = "/" + user.dirname + "/";
 
-                auto items = parse.getDirectoryItems(path, mini);
+                auto items = parse.getDirectoryItems(path, mini, currentPath);
 
                 res.set_content(path, "text/html");
 
@@ -542,7 +542,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
         });
 
     // Create a new directory
-    svr.Post("/mkdir", [this, &parse, &mini](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/mkdir", [this, &parse, &mini, &currentPath](const httplib::Request& req, httplib::Response& res) {
 
         auto user = checkSession(req);
         if (user.username.empty()) {
@@ -556,7 +556,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
 
         try {
 
-            parse = Parser(user.username, user.dirname, user.password, user.strongPassword);
+            parse.SetAccount(user.username, user.dirname, user.password, user.email, user.strongPassword, mini.inodeTable[user.index].inodeInfo.TotalSize);
 
             std::vector<std::string> parts = mini.SplitPath(path);
             std::string dirPath = "/";
@@ -580,7 +580,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
 
             std::string dirName = parts.back();
 
-            parse.createDirectory(dirPath, dirName, mini);
+            parse.createDirectory(dirPath, dirName, mini, currentPath);
             res.set_content("Directory created", "text/plain");
         }
         catch (const std::exception& e) {
@@ -591,7 +591,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
         });
     
     // Create a new file
-    svr.Post("/createfile", [this, &parse, &mini](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/createfile", [this, &parse, &mini, &currentPath](const httplib::Request& req, httplib::Response& res) {
 
         auto user = checkSession(req);
         if (user.username.empty()) {
@@ -605,7 +605,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
 
         try {
 
-            parse = Parser(user.username, user.dirname, user.password, user.strongPassword);
+            parse.SetAccount(user.username, user.dirname, user.password, user.email, user.strongPassword, mini.inodeTable[user.index].inodeInfo.TotalSize);
 
             std::vector<std::string> parts = mini.SplitPath(path);
             std::string filePath = "/";
@@ -629,7 +629,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
 
             std::string fileName = parts.back();
 
-            parse.createFile(filePath, fileName, mini);
+            parse.createFile(filePath, fileName, mini, currentPath);
             res.set_content("File created Sucessfully", "text/plain");
         }
         catch (const std::exception& e) {
@@ -654,7 +654,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
         std::vector<std::string> parts = mini.SplitPath(path);
 
         try {
-            parse = Parser(user.username, user.dirname, user.password, user.strongPassword);
+            parse.SetAccount(user.username, user.dirname, user.password, user.email, user.strongPassword, mini.inodeTable[user.index].inodeInfo.TotalSize);
 
             std::string propPath = "/";
             if (!parts.empty()) {
@@ -712,7 +712,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
     svr.Post("/cd", [&parse, &mini](const httplib::Request& req, httplib::Response& res) {
         try {
             std::string path = req.has_param("path") ? req.get_param_value("path") : "/";
-            parse.cd(path, mini);
+            //parse.cd(path, mini);
             res.set_content("Changed directory to: " + path, "text/plain");
         }
         catch (const std::exception& e) {
@@ -740,7 +740,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
             std::stringstream buffer;
             std::streambuf* old = std::cout.rdbuf(buffer.rdbuf());
 
-            parse.ls(argument, mini);
+//            parse.ls(argument, mini);
 
             std::cout.rdbuf(old);
             res.set_content(buffer.str(), "text/plain");
@@ -752,12 +752,12 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
     });
 
     // معلومات نظام الملفات
-    svr.Get("/info", [&parse, &mini](const httplib::Request&, httplib::Response& res) {
+    svr.Get("/info", [&parse, &mini, &currentPath](const httplib::Request&, httplib::Response& res) {
         try {
             std::stringstream buffer;
             std::streambuf* old = std::cout.rdbuf(buffer.rdbuf());
 
-            parse.printFileSystemInfo(mini);
+            parse.printFileSystemInfo(mini, currentPath);
 
             std::cout.rdbuf(old);
             res.set_content(buffer.str(), "text/plain");
@@ -769,12 +769,12 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
     });
 
     // هيكل الشجرة (tree)
-    svr.Get("/tree", [&parse, &mini](const httplib::Request&, httplib::Response& res) {
+    svr.Get("/tree", [&parse, &mini, &currentPath] (const httplib::Request&, httplib::Response& res) {
         try {
             std::stringstream buffer;
             std::streambuf* old = std::cout.rdbuf(buffer.rdbuf());
 
-            parse.PrintBTreeStructure(mini);
+            parse.PrintBTreeStructure(mini, currentPath);
 
             std::cout.rdbuf(old);
             res.set_content(buffer.str(), "text/plain");
@@ -786,13 +786,13 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
         });
 
     // إعادة تسمية ملف أو مجلد
-    svr.Post("/rename", [&parse, &mini](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/rename", [&parse, &mini, &currentPath](const httplib::Request& req, httplib::Response& res) {
         std::string oldPath = req.get_param_value("old_path");
         std::string newName = req.get_param_value("new_name");
         bool isDir = req.get_param_value("is_dir") == "true";
 
         try {
-            parse.rename(oldPath, newName, mini);
+            parse.rename(oldPath, newName, mini, currentPath);
             res.set_content("Renamed", "text/plain");
         }
         catch (const std::exception& e) {
@@ -802,11 +802,11 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
     });
 
     // نسخ ملف أو مجلد
-    svr.Post("/copy", [&parse, &mini](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/copy", [&parse, &mini, &currentPath](const httplib::Request& req, httplib::Response& res) {
         std::string srcPath = req.get_param_value("src");
         std::string destPath = req.get_param_value("dest");
         try {
-            bool success = parse.copy(srcPath, destPath, mini);
+            bool success = parse.copy(srcPath, destPath, mini, currentPath);
             if (success) {
                 res.set_content("Copied successfully", "text/plain");
             }
@@ -822,11 +822,11 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
         });
 
     // قص/نقل ملف أو مجلد
-    svr.Post("/move", [&parse, &mini](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/move", [&parse, &mini, &currentPath](const httplib::Request& req, httplib::Response& res) {
         std::string srcPath = req.get_param_value("src");
         std::string destPath = req.get_param_value("dest");
         try {
-            bool success = parse.move(srcPath, destPath, mini);
+            bool success = parse.move(srcPath, destPath, mini, currentPath);
             if (success) {
                 res.set_content("Moved successfully", "text/plain");
             }
@@ -842,20 +842,20 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
     });
 
     // حذف مجلد أو ملف
-    svr.Post("/delete", [this, &parse, &mini](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/delete", [this, &parse, &mini, &currentPath](const httplib::Request& req, httplib::Response& res) {
 
         auto user = authenticateUser(req);
 
-        parse = Parser(user.username, user.dirname, user.password, user.strongPassword);
+        parse.SetAccount(user.username, user.dirname, user.password, user.email, user.strongPassword, mini.inodeTable[user.index].inodeInfo.TotalSize);
 
         std::string path = req.get_param_value("path");
         bool isDir = req.get_param_value("is_dir") == "true";
         try {
             if (isDir) {
-                parse.deleteDirectory(path, mini);
+                parse.deleteDirectory(path, mini, currentPath);
             }
             else {
-                parse.deleteFile(path, mini);
+                parse.deleteFile(path, mini, currentPath);
             }
             res.set_content("Deleted", "text/plain");
         }
@@ -867,7 +867,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
 
   
     // قراءة محتوى الملف
-    svr.Get("/readfile", [&parse, &mini](const httplib::Request& req, httplib::Response& res) {
+    svr.Get("/readfile", [&parse, &mini, &password, &currentPath] (const httplib::Request& req, httplib::Response& res) {
         try {
             std::string encoded_path = req.get_param_value("path");
             std::string path = httplib::detail::decode_url(encoded_path, false);
@@ -912,7 +912,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
             size_t length = end - start + 1;
 
             // قراءة الجزء المطلوب من الملف
-            std::vector<char> data = parse.readFile(path, mini, start, length, run::Password);
+            std::vector<char> data = parse.readFile(path, mini, start, length, password, currentPath);
 
             if (req.has_header("Range")) {
                 res.status = 206;
@@ -934,14 +934,14 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
     });
 
     // كتابة محتوى الملف
-    svr.Post("/writefile", [&parse, &mini](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/writefile", [&parse, &mini, &currentPath, &password] (const httplib::Request& req, httplib::Response& res) {
         try {
             // استقبال البيانات كنموذج FormData
             auto path = req.get_file_value("path").content;
             auto content = req.get_file_value("content").content;
 
             std::vector<char> data(content.begin(), content.end());
-            bool success = parse.writeFile(path, data, mini, false, run::Password);
+            bool success = parse.writeFile(path, data, mini, false, password, currentPath);
 
             if (success) {
                 res.set_content("File saved successfully", "text/plain");
@@ -969,7 +969,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
             parse.analyzeStorage(mini);
 
             std::cout << "\nNext Access Prediction:" << std::endl;
-            parse.predictNextAccess(mini);
+//            parse.predictNextAccess(mini);
 
             std::cout << "\nFile Placement Optimization:" << std::endl;
             parse.optimizeFilePlacement(path, mini);
@@ -987,12 +987,12 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
     });
 
     // عرض خريطة التخزين (map)
-    svr.Get("/map", [&parse, &mini](const httplib::Request&, httplib::Response& res) {
+    svr.Get("/map", [&parse, &mini, &currentPath] (const httplib::Request&, httplib::Response& res) {
         try {
             std::stringstream buffer;
             std::streambuf* old = std::cout.rdbuf(buffer.rdbuf());
 
-            parse.printBitmap(mini);
+            parse.printBitmap(mini, currentPath);
 
             std::cout.rdbuf(old);
             res.set_content(buffer.str(), "text/plain");
@@ -1040,7 +1040,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
             std::stringstream buffer;
             std::streambuf* old = std::cout.rdbuf(buffer.rdbuf());
 
-            tokenizer.processCommand(command, mini);
+            //tokenizer.processCommand(command, mini);
 
             std::cout.rdbuf(old);
             res.set_content(buffer.str(), "text/plain");

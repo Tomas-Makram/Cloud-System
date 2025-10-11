@@ -1,12 +1,13 @@
 #ifndef MINI_HSFS_AI_H
 #define MINI_HSFS_AI_H
 
-#include "MiniHSFS.h"
 #include <vector>
 #include <map>
 #include <string>
 #include <chrono>
 #include <mutex>
+
+#include "MiniHSFS.h"
 
 class MiniHSFSAI {
 public:

@@ -1,12 +1,15 @@
-﻿#include <iostream>
+﻿#ifndef CLOUD_H
+#define CLOUD_H
+
+#include <iostream>
 #include <limits>
 #include <string>
 #include <iostream>
 #include <string>
 #include <vector>
+
 #include "httplib.h"
 #include "Tokenizer.h"
-#include "run.h"
 
 
 class Cloud {
@@ -17,7 +20,7 @@ public:
 
     std::string getIPfromIpconfig();
 
-	void setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tokenizer& tokenizer);
+	void setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tokenizer& tokenizer, std::string& currentPath, std::string& password);
 
 private:
 
@@ -48,4 +51,4 @@ private:
 	std::string formatSize(size_t bytes);
 
 };
-#pragma once
+#endif

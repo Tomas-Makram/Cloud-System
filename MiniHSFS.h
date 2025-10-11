@@ -1,7 +1,6 @@
 ﻿#ifndef MINI_HSFS_H
 #define MINI_HSFS_H
 
-#include "VirtualDisk.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <algorithm>
@@ -17,6 +16,8 @@
 #include <deque>
 #include <list>
 #include <map>
+
+#include "VirtualDisk.h"
 
 
 class MiniHSFS {
