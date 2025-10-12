@@ -133,7 +133,7 @@ public:
 
     int PathToInode(const std::vector<std::string>& path);
     std::vector<std::string> SplitPath(const std::string& path)const;
-    void ValidatePath(const std::string& path); // Check Validate Path
+    std::string ValidatePath(const std::string& path); // Check Validate Path
     void UpdateInodeTimestamps(int inodeIndex, bool modify = true); // To Update Time after any Edit Parent Directory or File
     bool ValidateEntry(const std::string& name); //Check the name Entry (Dir or file)
 

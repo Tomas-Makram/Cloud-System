@@ -14,6 +14,8 @@ size_t run::TotalSize = 10 * 1024 * 1024;//bytes
 
 
 void run::CloudSevrver(MiniHSFS& mini) {
+    currentPath = "/" + DirName;
+
     Cloud cloud;
     std::string ip = cloud.getIPfromIpconfig();
     std::cout << "Local IP: " << "http://" << ip << ":8081" << std::endl;
@@ -21,10 +23,9 @@ void run::CloudSevrver(MiniHSFS& mini) {
     httplib::Server svr;
     Parser parse(UserName, DirName, Password, Email, strongPassword, TotalSize);
     Tokenizer tokenize(UserName, DirName, Password, Email, strongPassword, TotalSize);
-    cloud.setupRoutes(svr, parse, mini, tokenize, run::currentPath, Password);
+    cloud.setupRoutes(svr, parse, mini, tokenize, currentPath, Password);
     std::cout << "Server is running at http://localhost:8081\n";
 
-    currentPath = currentPath + DirName;
     svr.listen("0.0.0.0", 8081);
 }
 

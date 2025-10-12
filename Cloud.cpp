@@ -876,7 +876,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
                 throw std::runtime_error("Filesystem not mounted");
             }
 
-            mini.ValidatePath(path);
+            path = mini.ValidatePath(path);
 
             int inode_index = mini.FindFile(path);
             if (inode_index == -1) {
@@ -937,7 +937,7 @@ void Cloud::setupRoutes(httplib::Server& svr, Parser& parse, MiniHSFS& mini, Tok
     svr.Post("/writefile", [&parse, &mini, &currentPath, &password] (const httplib::Request& req, httplib::Response& res) {
         try {
             // استقبال البيانات كنموذج FormData
-            auto path = req.get_file_value("path").content;
+            auto path = mini.ValidatePath(req.get_file_value("path").content);
             auto content = req.get_file_value("content").content;
 
             std::vector<char> data(content.begin(), content.end());

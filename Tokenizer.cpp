@@ -100,12 +100,10 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
 
     else if (args[0] == "open" && args.size() > 1) {
         for (size_t i = 1; i < args.size(); i++) {
-            std::string full_path = (args[i][0] != '/')
-                ? currentPath + (currentPath != "/" ? "/" : "") + args[i]
-                : args[i];
+            std::string fullPath = (args[i][0] != '/') ? currentPath + (currentPath != "/" ? "/" : "") + args[i] : args[i];
 
             try {
-                std::vector<char> data = parse.readFile(full_path, mini, 0, true, password);
+                std::vector<char> data = parse.readFile(fullPath, mini, 0, true, password, fullPath);
                 std::string str(data.begin(), data.end());
                 std::cout << "File content:\n" << str << std::endl;
             }

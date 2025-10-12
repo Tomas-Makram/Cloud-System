@@ -1051,7 +1051,7 @@ std::vector<std::string> MiniHSFS::SplitPath(const std::string& path) const {
     return components;
 }
 
-void MiniHSFS::ValidatePath(const std::string& path) {
+std::string MiniHSFS::ValidatePath(const std::string& path) {
     if (path.empty()) {
         throw std::invalid_argument("Path cannot be empty");
     }
@@ -1063,6 +1063,17 @@ void MiniHSFS::ValidatePath(const std::string& path) {
     if (path[0] != '/') {
         throw std::invalid_argument("Path must be absolute");
     }
+
+    std::vector<std::string> paths = SplitPath(path);
+    std::string newPath;
+
+    for (const std::string& item : paths) {
+        if (!item.empty())
+            newPath += "/" + item;
+    }
+    if (paths.size() == 0)
+        newPath = "/";
+    return newPath;
 }
 
 int MiniHSFS::PathToInode(const std::vector<std::string>& path) {
