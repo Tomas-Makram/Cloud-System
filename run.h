@@ -26,15 +26,19 @@
 
 class run {
 public:
-	void CloudSevrver(MiniHSFS& mini);
+	std::string currentPath;
+	std::string UserName;
+	std::string DirName;
+	std::string Password;
+	int strongPassword;
+	std::string Email;
+	size_t TotalSize;
 
-	static std::string currentPath;
-	static std::string UserName;
-	static std::string DirName;
-	static std::string Password;
-	static int strongPassword;
-	static std::string Email;
-	static size_t TotalSize;
+	void CloudSevrver(MiniHSFS& mini);
+	bool Auth(MiniHSFS& mini, Parser& parse, std::string& currentPath);
+
+private:
+
 
 };
 #endif

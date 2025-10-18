@@ -98,13 +98,13 @@ void MiniHSFS::Mount(size_t inodeSize) {
         LoadInodeTable();
         LoadBTree();
 
-
         //// Verify root directory
         if (!inodeTable[0].isUsed || !inodeTable[0].isDirectory) {
             throw std::runtime_error("Root directory corruption detected");
         }
 
         mounted = true;
+
     }
     catch (const std::exception& e) {
         // Clean up if mount fails
@@ -1742,68 +1742,69 @@ size_t MiniHSFS::CalculateBTreeBlocks() {
     return (std::max)(suggested, minBlocks);
 }
 
-// دالة مساعدة: حساب النسبة المئوية التكيفية
+// Helper function: Calculate adaptive percentage
 double MiniHSFS::CalculateAdaptiveBTreePercentage(size_t totalBlocks, size_t btreeOrder) {
-    // نسبة أساسية ثابتة
-    double basePercentage = 0.05; // 5% كنسبة أساسية مثلاً
 
-    // تعديل النسبة بناءً على حجم القرص
-    if (totalBlocks >= 500000) { // أقراص كبيرة جداً
-        basePercentage = 0.03; // 3% للأقراص الكبيرة
+    // Fixed base ratio
+    double basePercentage = 0.05; // 5% as a basic percentage, for example
+
+    // Adjust the ratio based on the disk size
+    if (totalBlocks >= 500000) { //Very large discs
+        basePercentage = 0.03; // 3% for large discs
     }
-    else if (totalBlocks >= 100000) { // أقراص كبيرة
-        basePercentage = 0.04; // 4% للأقراص الكبيرة
+    else if (totalBlocks >= 100000) { // Large discs
+        basePercentage = 0.04; // 4% for large discs
     }
-    else if (totalBlocks <= 10000) { // أقراص صغيرة
-        basePercentage = 0.08; // 8% للأقراص الصغيرة
+    else if (totalBlocks <= 10000) { // Small tablets
+        basePercentage = 0.08; // 8% for small tablets
     }
 
     std::cout << "basePercentage = " << basePercentage << '\n';
 
-    // تعديل بناءً على الـ Order
+    // Modify based on the order
     double orderFactor = 1.0;
     if (btreeOrder > 100) {
-        orderFactor = 0.7; // Order عالي = شجرة أصغر
+        orderFactor = 0.7;// Order higher = smaller tree
     }
     else if (btreeOrder < 20) {
-        orderFactor = 1.3; // Order منخفض = شجرة أكبر
+        orderFactor = 1.3;// Order lower = larger tree
     }
 
     double adaptivePercentage = basePercentage * orderFactor;
 
     // حدود أمان للنسبة
-    const double MIN_PERCENTAGE = 0.01;  // 1% كحد أدنى
-    const double MAX_PERCENTAGE = 0.20;  // 20% كحد أقصى
+    const double minPercentaeg = 0.01;  // 1% minimum
+    const double maxPercentaeg = 0.20; // 20% maximum
 
-    return (std::max)(MIN_PERCENTAGE, (std::min)(adaptivePercentage, MAX_PERCENTAGE));
+    return (std::max)(minPercentaeg, (std::min)(adaptivePercentage, maxPercentaeg));
 }
 
-// دالة مساعدة: حساب الحد الأدنى للكتل
+// Helper function: Calculate minimum blocks
 size_t MiniHSFS::CalculateMinimumBTreeBlocks(size_t totalBlocks) {
     if (totalBlocks < 1000) {
-        return 8;  // لأقراص صغيرة جداً
+        return 8;  //For very small tablets
     }
     else if (totalBlocks < 10000) {
-        return 16; // لأقراص صغيرة
+        return 16; //For small tablets
     }
     else if (totalBlocks < 100000) {
-        return 32; // لأقراص متوسطة
+        return 32; //For medium tablets
     }
     else {
-        return 64; // لأقراص كبيرة
+        return 64; //For large discs
     }
 }
 
-// دالة إضافية: التحقق من كفاءة التوزيع
+// Additional function: Check the efficiency of the distribution
 bool MiniHSFS::ValidateBTreeConfiguration() {
     size_t btreeBlocks = CalculateBTreeBlocks();
     size_t btreeOrder = CalculateBTreeOrder();
     size_t totalBlocks = disk.totalBlocks();
 
-    // سعة الشجرة القصوى
+    // Maximum tree capacity
     size_t maxCapacity = CalculateBTreeMaxCapacity(btreeBlocks, btreeOrder);
 
-    // يجب أن تسع الشجرة على الأقل 150% من الكتل المتوقعة
+    // The tree must accommodate at least 150% of the expected blocks.
     size_t expectedDataBlocks = totalBlocks - dataStartIndex;
 
     std::cout << "B-Tree Configuration Validation:\n";
@@ -1814,15 +1815,16 @@ bool MiniHSFS::ValidateBTreeConfiguration() {
     std::cout << "  - Expected Data: " << expectedDataBlocks << " blocks\n";
     std::cout << "  - Efficiency: " << (maxCapacity * 100 / expectedDataBlocks) << "%\n";
 
-    return maxCapacity >= expectedDataBlocks * 1.2; // هامش أمان 20%
+    return maxCapacity >= expectedDataBlocks * 1.2; //20% safety margin
 }
 
-// دالة مساعدة: حساب السعة القصوى للشجرة
+// Helper function: Calculate the maximum tree capacity
 size_t MiniHSFS::CalculateBTreeMaxCapacity(size_t btreeBlocks, size_t btreeOrder) {
-    // في شجرة B+، كل عقدة ورقية تسع (order - 1) مفتاح
+    
+    // In a B+ tree, each leaf node has an (order - 1) key
     size_t keysPerLeaf = btreeOrder - 1;
 
-    // افتراض أن 50% من الكتل للعقد الورقية
+    //Assume 50% of blocks are for leaf nodes
     size_t leafNodes = btreeBlocks / 2;
 
     return leafNodes * keysPerLeaf;
@@ -1850,7 +1852,6 @@ uint32_t MiniHSFS::CalculateChecksum(const char* data, size_t length) {
     uint32_t checksum = 0;
     for (size_t i = 0; i < length; ++i) {
         checksum = (checksum << 4) ^ (checksum >> 28) ^ static_cast<uint8_t>(data[i]);
-//        checksum = (checksum << 3) ^ data[i] ^ (checksum >> 29);
     }
     return checksum;
 }

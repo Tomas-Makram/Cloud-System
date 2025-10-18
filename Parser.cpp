@@ -105,7 +105,7 @@ int Parser::checkingAccount(MiniHSFS& mini, size_t dataSize, bool read, std::str
             throw std::runtime_error("Permission denied: not the owner of the target directory");
 
         if (!(mini.inodeTable[indexpath].inodeInfo.UserName == this->myAccount.username && crypto.ValidatePassword(this->myAccount.password, mini.inodeTable[indexpath].inodeInfo.Password, this->myAccount.strongPassword)))
-            throw std::runtime_error("Unvalid Account");
+            throw std::runtime_error("Invalid Account");
 
         if(!read)
             if (!(mini.inodeTable[indexpath].inodeInfo.TotalSize > mini.inodeTable[indexpath].inodeInfo.Usage + mini.inodeSize + dataSize))
@@ -154,8 +154,6 @@ void Parser::cd(const std::string& path, MiniHSFS& mini, std::string& currentPat
     if (path.empty()) {
         return;
     }
-
-    initializeAI(mini);
 
     std::string combinedPath;
     if (path[0] == '/') {
@@ -208,23 +206,26 @@ void Parser::cd(const std::string& path, MiniHSFS& mini, std::string& currentPat
     }
 
     try {
-        mini.ValidatePath(newPath);
+        newPath = mini.ValidatePath(newPath);
         std::vector<std::string> checkParts = mini.SplitPath(newPath);
         int inode = mini.PathToInode(checkParts);
 
+        CryptoUtils crypto;
         if (inode == -1 || !mini.inodeTable[inode].isDirectory) {
             mini.Disk().SetConsoleColor(mini.Disk().Red);
             throw std::runtime_error("Directory not found: " + newPath);
             mini.Disk().SetConsoleColor(mini.Disk().Default);
         }
 
-        currentPath = newPath;
+        if (newPath != "/" || mini.SplitPath(newPath).size() >= 1)
+            currentPath = newPath;
+        else
+            throw std::runtime_error("Error in your Account");
+
     }
     catch (const std::exception& ex) {
         throw std::runtime_error(ex.what());
     }
-    // AI Enhancement: Analyze access pattern
-    fsAI->analyzeAccessPattern(path.empty() ? "/" : path);
 }
 
 MiniHSFS::Inode& Parser::getDirectoryItems(const std::string& path, MiniHSFS& mini, std::string& currentPath) {
@@ -263,8 +264,8 @@ MiniHSFS::Inode& Parser::getDirectoryItems(const std::string& path, MiniHSFS& mi
 }
 
 void Parser::printFileSystemInfo(MiniHSFS& mini, std::string& currentPath){
-    GetInfo(mini, checkingAccount(mini, 0, true, currentPath));
-    //    mini.PrintSuperblockInfo();
+    //GetInfo(mini, checkingAccount(mini, 0, true, currentPath));
+    mini.PrintSuperblockInfo();
 }
 
 void Parser::PrintBTreeStructure(MiniHSFS& mini, std::string& currentPath){
@@ -402,10 +403,10 @@ void Parser::printDirectoryContents(int dirInode, const std::string& path, bool 
     }
 
     // Count the number of visible entries
-    size_t visible_entries = 0;
+    size_t visibleEntries = 0;
     for (const auto& entry : dir.entries) {
         if (!showHidden && entry.first[0] == '.') continue;
-        visible_entries++;
+        visibleEntries++;
     }
 
     // File size format
@@ -422,14 +423,14 @@ void Parser::printDirectoryContents(int dirInode, const std::string& path, bool 
         return out.str();
         };
 
-    size_t current_entry = 0;
+    size_t currentEntry = 0;
     for (const auto& entry : dir.entries) {
         const std::string& name = entry.first;
 
         // Skip hidden files if not required
         if (!showHidden && name[0] == '.') continue;
-        current_entry++;
-        bool last_entry = (current_entry == visible_entries);
+        currentEntry++;
+        bool last_entry = (currentEntry == visibleEntries);
 
         // Check the validity of the input inode
         if (entry.second < 0 || entry.second >= static_cast<int>(mini.inodeTable.size())) {
@@ -511,7 +512,7 @@ void Parser::printDirectoryContents(int dirInode, const std::string& path, bool 
 
         mini.Disk().SetConsoleColor(mini.Disk().Green);
         std::cout << "Free space : "
-            << formatSize(mini.Disk().freeBlocksCount() * mini.Disk().blockSize)
+            << formatSize(mini.inodeTable[mini.inodeTable[mini.rootNodeIndex].entries.find(this->myAccount.dirname)->second].inodeInfo.TotalSize - mini.inodeTable[1].inodeInfo.Usage) //mini.Disk().freeBlocksCount() * mini.Disk().blockSize)
             << " | Inode: " << dirInode << '\n';
         mini.Disk().SetConsoleColor(mini.Disk().Default);
     }

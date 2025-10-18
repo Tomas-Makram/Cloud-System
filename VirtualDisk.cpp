@@ -590,10 +590,8 @@ void VirtualDisk::saveBitmap_nl(bool forceFlush) {
     size_t byteSize = (bitmapSize + 7) / 8;
     size_t totalAvailableBytes = systemBlock * blockSize;
 
-    if (byteSize > totalAvailableBytes) {
-        std::cerr << "Error: SYSTEM_BLOCKS too small to hold bitmap.\n";
-        return;
-    }
+    if (byteSize > totalAvailableBytes)
+        throw std::runtime_error("Error: System Blocks too small to hold bitmap.\n");
 
     std::vector<char> bitmap(byteSize, 0);
     for (size_t i = 0; i < bitmapSize; ++i) {
@@ -666,10 +664,8 @@ void VirtualDisk::loadBitmap_nl() {
     size_t byteSize = (bitmapSize + 7) / 8;
     size_t totalAvailableBytes = systemBlock * blockSize;
 
-    if (byteSize > totalAvailableBytes) {
-        std::cerr << "Error: SYSTEM_BLOCKS too small to load bitmap.\n";
-        return;
-    }
+    if (byteSize > totalAvailableBytes)
+        throw std::runtime_error("Error: System Blocks too small to load bitmap.\n");
 
     std::vector<char> bitmap(byteSize, 0);
     size_t bytesRemaining = byteSize;

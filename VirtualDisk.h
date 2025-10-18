@@ -20,7 +20,7 @@
 #include <sys/mman.h>
 
 #else
-#include <fsteram>
+#include <fstream>
 #endif
 
 #include "CryptoUtils.h"
@@ -106,6 +106,7 @@ public:
 
 
 private:
+
     // platform handles
 #ifdef _WIN32
     HANDLE fileHandle = INVALID_HANDLE_VALUE;
@@ -138,7 +139,6 @@ private:
     uint64_t freeBlocksCount_nl() const;
     bool ensureOpen_unlocked() const;
 
-  
 };
 
 #endif // VIRTUALDISK_H

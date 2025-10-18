@@ -73,8 +73,6 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
 
     else if (args[0] == "info")
         parse.printFileSystemInfo(mini, currentPath);
-    else if (args[0] == "cloud");
-    //        parse.Network(mini);
 
     else if (args[0] == "tree")
         parse.PrintBTreeStructure(mini, currentPath);
@@ -246,12 +244,12 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
         std::vector<char> data(1 * 1024 * 1024, 't');
         //std::vector<char> data(str.begin(), str.end());
 
-        std::string full_path = (args[1][0] != '/')
+        std::string fullPath = (args[1][0] != '/')
             ? currentPath + (currentPath != "/" ? "/" : "") + args[1]
             : args[1];
 
         try {
-            if (parse.writeFile(full_path, data, mini, false, password)) {
+            if (parse.writeFile(fullPath, data, mini, false, password, currentPath)) {
                 std::cout << "File written successfully" << std::endl;
             }
             else {
@@ -366,7 +364,7 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
         parse.exit(mini);
     
     else
-        std::cout << "Error: unknown command\n";
+        throw std::exception("Error: unknown command\n");
 }
 
 //Generate Command Line after parse argument
