@@ -161,20 +161,28 @@ void MiniHSFS::Unmount() {
 ////////////////////////////Initialize System
 
 void MiniHSFS::InitializeSuperblock() {
-    SuperblockInfo info;
-    std::memset(&info, 0, sizeof(info));
-
+    SuperblockInfo info{};
     const char* magicStr = "Tomas";
     std::memcpy(info.magic, magicStr, strlen(magicStr));
 
-    info.version = 0x00010000;
+    info.version = 0x07010000;
     info.blockSize = disk.blockSize;
     info.inodeSize = inodeSize;
-    info.systemSize = static_cast<uint32_t>(inodeBlocks) + btreeBlocks + superBlockBlocks + disk.getSystemBlocks();
-    info.totalBlocks = disk.totalBlocks();
-    info.freeBlocks = static_cast<uint32_t>(info.totalBlocks - (static_cast<uint32_t>(inodeBlocks) + btreeBlocks + superBlockBlocks + disk.getSystemBlocks()));
+
+    // Calculate locations dynamically
     info.totalInodes = inodeCount;
-    info.dataStartIndex = dataStartIndex;
+    info.inodeTableBlocks = inodeBlocks;
+    info.superBlockBlocks = superBlockBlocks;
+    info.btreeBlocks = btreeBlocks;
+
+    info.superBlockStart = 0;
+    info.inodeTableStart = info.superBlockStart + info.superBlockBlocks + disk.getSystemBlocks();
+    info.btreeStart = info.inodeTableStart + info.inodeTableBlocks;
+    info.dataStartIndex = info.btreeStart + info.btreeBlocks;
+
+    info.systemSize = info.dataStartIndex;
+    info.totalBlocks = disk.totalBlocks();
+    info.freeBlocks = info.totalBlocks - info.systemSize;
     info.freeInodes = inodeCount - 1;
     info.creationTime = time(nullptr);
     info.lastMountTime = info.creationTime;
@@ -755,10 +763,25 @@ int MiniHSFS::BTreeGetSuccessor(int nodeIndex) {
 
 MiniHSFS::SuperblockInfo MiniHSFS::LoadSuperblock() {
     std::vector<char> data = disk.readData(
-        VirtualDisk::Extent{ static_cast<uint32_t>(superBlockIndex), static_cast<uint32_t>(superBlockBlocks) });
+        VirtualDisk::Extent{
+            static_cast<uint32_t>(superBlockIndex),
+            static_cast<uint32_t>(superBlockBlocks)
+        });
 
-    SuperblockInfo info;
-    std::memcpy(&info, data.data(), sizeof(SuperblockInfo));
+    SuperblockInfo info{};
+    std::memcpy(&info, data.data(), (std::min)(sizeof(SuperblockInfo), data.size()));
+
+    // Check health
+    if (strncmp(info.magic, "Tomas", 5) != 0) {
+        std::cerr << "LoadSuperblock: Invalid filesystem magic header.\n";
+        throw std::runtime_error("Invalid Superblock Magic");
+    }
+
+    // Check logical values
+    if (info.inodeSize == 0 || info.totalInodes == 0) {
+        std::cerr << "LoadSuperblock: corrupted inode values.\n";
+        throw std::runtime_error("Invalid Superblock Structure");
+    }
 
     return info;
 }
@@ -766,98 +789,97 @@ MiniHSFS::SuperblockInfo MiniHSFS::LoadSuperblock() {
 void MiniHSFS::SaveSuperblock(const SuperblockInfo& info) {
     std::vector<char> data(superBlockBlocks * disk.blockSize, 0);
 
+    // Copy the entire structure to the buffer
     std::memcpy(data.data(), &info, sizeof(SuperblockInfo));
-    disk.writeData(data,
-        VirtualDisk::Extent{ static_cast<uint32_t>(superBlockIndex), static_cast<uint32_t>(superBlockBlocks) }, "", false);
 
+    //We write it to disk
+    bool ok = disk.writeData(
+        data,
+        VirtualDisk::Extent{
+            static_cast<uint32_t>(superBlockIndex),
+            static_cast<uint32_t>(superBlockBlocks)
+        },
+        "", false);
+
+    if (!ok) {
+        std::cerr << "SaveSuperblock: failed to write superblock.\n";
+        throw std::runtime_error("Superblock Write Failure");
+    }
 }
 
 void MiniHSFS::UpdateSuperblockForDynamicInodes() {
     SuperblockInfo info = LoadSuperblock();
+
     info.inodeSize = inodeSize;
     info.totalInodes = static_cast<uint32_t>(inodeTable.size());
-    info.freeInodes = static_cast<uint32_t>(CountFreeInodes());
-    info.lastWriteTime = time(nullptr);
-    info.dataStartIndex = dataStartIndex;
+    info.inodeTableBlocks = inodeBlocks;
 
-    // Update the system size to reflect the expansion of the inodes area
-    info.systemSize = static_cast<uint32_t>(disk.getSystemBlocks() + superBlockBlocks + inodeBlocks + btreeBlocks);
+    info.dataStartIndex = info.inodeTableStart + info.inodeTableBlocks + info.btreeBlocks;
+    info.systemSize = info.dataStartIndex;
+    info.freeInodes = CountFreeInodes();
+    info.lastWriteTime = time(nullptr);
 
     SaveSuperblock(info);
 }
 
 void MiniHSFS::LoadInodeTable() {
     std::lock_guard<std::recursive_mutex> lock(fsMutex);
-
     SuperblockInfo sb = LoadSuperblock();
+
     inodeSize = sb.inodeSize;
+    inodeCount = sb.totalInodes;
+    inodeBlocks = sb.inodeTableBlocks;
 
-    inodeCount = sb.totalInodes;               // The only source of volume
-    inodeBlocks = CalculateBlocksForNewInodes(inodeCount); // Calculate how many blocks we need to read
     inodeTable.assign(inodeCount, Inode{});
-
-    // Read all blocks of the iode table
     size_t bytes = inodeBlocks * disk.blockSize;
+
     std::vector<char> buf(bytes, 0);
+    uint32_t startBlock = sb.inodeTableStart;
+
     for (size_t b = 0; b < inodeBlocks; ++b) {
-        auto data = disk.readData(
-            VirtualDisk::Extent(disk.getSystemBlocks() + static_cast<uint32_t>(superBlockBlocks) + static_cast<uint32_t>(b), 1));
+        auto data = disk.readData(VirtualDisk::Extent(startBlock + static_cast<uint32_t>(b), 1));
         std::copy(data.begin(), data.end(), buf.begin() + b * disk.blockSize);
     }
 
-    // Decode each inode
     for (size_t i = 0; i < inodeCount; ++i) {
         if (DeserializeInode(inodeTable[i], buf.data() + i * inodeSize, inodeSize) == 0) {
-            inodeTable[i] = Inode(); // if faild reset inode
+            inodeTable[i] = Inode();
         }
     }
 
-    RebuildInodeBitmap(); // Build bitmap from isUsed after loading
+    RebuildInodeBitmap();
 }
 
 void MiniHSFS::SaveInodeTable() {
     std::lock_guard<std::recursive_mutex> lock(fsMutex);
+    SuperblockInfo sb = LoadSuperblock();
 
     size_t requiredBlocks = CalculateBlocksForNewInodes(inodeTable.size());
     if (requiredBlocks > inodeBlocks) {
-        size_t add = requiredBlocks - inodeBlocks;
-        VirtualDisk::Extent ext(disk.getSystemBlocks() + static_cast<uint32_t>(superBlockBlocks) + static_cast<uint32_t>(inodeBlocks), static_cast<uint32_t>(add));
-        disk.allocateBlocks(ext.blockCount);
-
-        std::vector<char> zero(disk.blockSize, 0);
-        for (size_t i = 0; i < add; ++i)
-            disk.writeData(zero, VirtualDisk::Extent(ext.startBlock + static_cast<uint32_t>(i), 1), "", true);
-
         inodeBlocks = requiredBlocks;
-        UpdateSuperblockForDynamicInodes();
+        sb.inodeTableBlocks = inodeBlocks;
+        sb.totalInodes = static_cast<uint32_t>(inodeTable.size());
+        sb.dataStartIndex = sb.inodeTableStart + sb.inodeTableBlocks + sb.btreeBlocks;
+        sb.systemSize = sb.dataStartIndex;
+        SaveSuperblock(sb);
     }
 
-    std::vector<char> big(inodeBlocks * disk.blockSize, 0);
-    size_t ok = 0;
+    std::vector<char> buffer(inodeBlocks * disk.blockSize, 0);
     for (size_t i = 0; i < inodeTable.size(); ++i) {
-        size_t off = i * inodeSize;
-        if (off + inodeSize > big.size())
-            throw std::runtime_error("SaveInodeTable: inode area too small");
-
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        if (SerializeInode(inodeTable[i], big.data() + off, inodeSize) == 0)
-            throw std::runtime_error("SaveInodeTable: serialize failed for inode " + std::to_string(i));
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        inodeTable[i].isDirty = false;
-        ok++;
+        if (SerializeInode(inodeTable[i], buffer.data() + i * inodeSize, inodeSize) == 0)
+            throw std::runtime_error("Failed to serialize inode " + std::to_string(i));
     }
 
+    uint32_t startBlock = sb.inodeTableStart;
     for (size_t b = 0; b < inodeBlocks; ++b) {
-        uint32_t phys = disk.getSystemBlocks() + superBlockBlocks + static_cast<uint32_t>(b);
-        size_t start = b * disk.blockSize;
-        size_t end = (std::min)(start + (size_t)disk.blockSize, big.size());
-        std::vector<char> blk(big.begin() + start, big.begin() + end);
-        disk.writeData(blk, VirtualDisk::Extent(phys, 1), "", true);
+        std::vector<char> blk(buffer.begin() + b * disk.blockSize, buffer.begin() + (b + 1) * disk.blockSize);
+        disk.writeData(blk, VirtualDisk::Extent(startBlock + static_cast<uint32_t>(b), 1), "", true);
     }
 
     UpdateSuperblockForDynamicInodes();
 }
+
+///////////////////////////////////////////////////////////////
 
 void MiniHSFS::LoadBTree() {
     std::lock_guard<std::recursive_mutex> lock(fsMutex);
@@ -1055,7 +1077,7 @@ std::string MiniHSFS::ValidatePath(const std::string& path) {
     if (path.empty()) {
         throw std::invalid_argument("Path cannot be empty");
     }
-
+    
     if (path.length() > maxPathLength) {
         throw std::invalid_argument("Path too long");
     }
@@ -1139,24 +1161,38 @@ bool MiniHSFS::ValidateEntry(const std::string& name) {
 void MiniHSFS::PrintSuperblockInfo() {
     SuperblockInfo info = LoadSuperblock();
 
-    auto printField = [](const std::string& label, const std::string& value) {
-        std::cout << "\033[1m\033[34m" << label << ":\033[0m " << "\033[32m" << value << "\033[0m\n";
+    auto printField = [&](const std::string& label, const std::string& value) {
+        this->disk.SetConsoleColor(disk.Blue);
+        std::cout << label<<" : ";
+        this->disk.SetConsoleColor(disk.Green);
+        std::cout << value << '\n';
+        this->disk.SetConsoleColor(disk.Default);
         };
 
     printField("Filesystem Magic", std::string(info.magic, strnlen(info.magic, sizeof(info.magic))));
 
     std::ostringstream version;
-    version << (info.version >> 16) << "."
-        << ((info.version >> 8) & 0xFF) << "."
-        << (info.version & 0xFF);
+    version << ((info.version >> 24) & 0xFF) << "."
+        << ((info.version >> 16) & 0xFF) << "."
+        << ((info.version >> 8) & 0xFF);
     printField("Version", version.str());
-    printField("System Blocks Total", std::to_string(info.systemSize));
-    printField("Block Size", std::to_string(info.blockSize));
-    printField("Inode Size", std::to_string(info.inodeSize));
+
+    printField("System Size (Blocks)", std::to_string(info.systemSize));
+    printField("Block Size (Bytes)", std::to_string(info.blockSize));
+    printField("Inode Size (Bytes)", std::to_string(info.inodeSize));
     printField("Total Blocks", std::to_string(info.totalBlocks));
     printField("Free Blocks", std::to_string(info.freeBlocks));
     printField("Total Inodes", std::to_string(info.totalInodes));
     printField("Free Inodes", std::to_string(info.freeInodes));
+
+    // Section locations
+    printField("Superblock Start", std::to_string(info.superBlockStart));
+    printField("Superblock Blocks", std::to_string(info.superBlockBlocks));
+    printField("Inode Table Start", std::to_string(info.inodeTableStart));
+    printField("Inode Table Blocks", std::to_string(info.inodeTableBlocks));
+    printField("BTree Start", std::to_string(info.btreeStart));
+    printField("BTree Blocks", std::to_string(info.btreeBlocks));
+    printField("Data Start Index", std::to_string(info.dataStartIndex));
 
     char buffer[26];
 #ifdef _WIN32
@@ -1165,12 +1201,14 @@ void MiniHSFS::PrintSuperblockInfo() {
     ctime_r(&info.creationTime, buffer);
 #endif
     printField("Created", std::string(buffer));
+
 #ifdef _WIN32
     ctime_s(buffer, sizeof(buffer), &info.lastMountTime);
 #else
     ctime_r(&info.lastMountTime, buffer);
 #endif
     printField("Last Mount", std::string(buffer));
+
 #ifdef _WIN32
     ctime_s(buffer, sizeof(buffer), &info.lastWriteTime);
 #else
@@ -1863,6 +1901,34 @@ size_t MiniHSFS::CalculateBlocksForNewInodes(size_t inodeCount) {
     size_t blocksNeeded = (totalBytes + disk.blockSize - 1) / disk.blockSize;
 
     return blocksNeeded;
+}
+
+//To get the size of Inode to can add new Entry or not
+size_t MiniHSFS::CalculateInodeSpace(const Inode& inode) {
+    
+    std::vector<char> buffer(inodeSize);
+    size_t used = SerializeInode(inode, buffer.data(), inodeSize);
+    return inodeSize > used ? inodeSize - used : 0;
+}
+
+//To get the size of Entry to can add in Inode
+size_t MiniHSFS::CalculateEntrySize(Inode& inode, const std::string& name, int childInode) {
+
+    // Calculate the volume before adding
+    std::vector<char> beforeBuf(inodeSize);
+    size_t before = SerializeInode(inode, beforeBuf.data(), inodeSize);
+
+    // Add entry temporarily
+    inode.entries[name] = childInode;
+
+    // Calculate the volume after adding
+    std::vector<char> afterBuf(inodeSize);
+    size_t after = SerializeInode(inode, afterBuf.data(), inodeSize);
+
+    // Delete the temporary entry
+    inode.entries.erase(name);
+
+    return after - before;
 }
 
 //////////////////////////////Convertion Operation

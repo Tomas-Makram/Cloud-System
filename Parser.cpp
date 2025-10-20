@@ -794,16 +794,27 @@ bool Parser::createDirectory(const std::string path, const std::string name, Min
     newDir.isDirty = true;
     newDir.inodeInfo.UserName = this->myAccount.username;
 
-    // Add to parent folder
-    mini.inodeTable[parentInode].entries[dirname] = newInode;
-    mini.inodeTable[parentInode].modificationTime = time(nullptr);
-    mini.inodeTable[parentInode].isDirty = true;
-
-    // Update account space
-    mini.inodeTable[ownerInode].inodeInfo.Usage += mini.inodeSize;
-    mini.inodeTable[ownerInode].isDirty = true;
-
     try {
+        // Update account space
+        mini.inodeTable[ownerInode].inodeInfo.Usage += mini.inodeSize;
+
+        //Check Size befor adding
+        if ((mini.CalculateInodeSpace(mini.inodeTable[parentInode]) < mini.CalculateEntrySize(mini.inodeTable[parentInode], dirname, newInode)) || (mini.CalculateInodeSpace(mini.inodeTable[parentInode]) < (sizeof(int) + dirname.size() + sizeof(uint16_t)))) {
+            throw std::runtime_error(
+                std::string("No Space In this Directory, Remaining space in inode: ") +
+                std::to_string(mini.CalculateInodeSpace(mini.inodeTable[parentInode])) +
+                " bytes"
+            );
+        }
+
+        // Add to parent folder
+        mini.inodeTable[parentInode].entries[dirname] = newInode;
+        mini.inodeTable[parentInode].modificationTime = time(nullptr);
+        mini.inodeTable[parentInode].isDirty = true;
+
+        // Update owner inode
+        mini.inodeTable[ownerInode].isDirty = true;
+
         // Save changes
         mini.SaveInodeToDisk(newInode);
         mini.SaveInodeToDisk(parentInode);
@@ -823,7 +834,6 @@ bool Parser::createDirectory(const std::string path, const std::string name, Min
         mini.inodeTable[parentInode].isDirty = true;
         mini.inodeTable[ownerInode].inodeInfo.Usage -= mini.inodeSize;
         mini.inodeTable[newInode] = MiniHSFS::Inode();
-
         throw std::runtime_error("Failed to create directory: " + std::string(e.what()));
     }
 }
@@ -897,16 +907,28 @@ int Parser::createFile(const std::string& path, const std::string name, MiniHSFS
     newFile.isDirty = true;
     newFile.inodeInfo.UserName = mini.inodeTable[ownerInode].inodeInfo.UserName;
 
-    // Add to parent folder
-    mini.inodeTable[parentInode].entries[filename] = newInode;
-    mini.inodeTable[parentInode].modificationTime = time(nullptr);
-    mini.inodeTable[parentInode].isDirty = true;
-
-    // Update account space
-    mini.inodeTable[ownerInode].inodeInfo.Usage += mini.inodeSize;
-    mini.inodeTable[ownerInode].isDirty = true;
-
     try {
+        
+        // Update account space
+        mini.inodeTable[ownerInode].inodeInfo.Usage += mini.inodeSize;
+
+        //Check Size befor adding
+        if ((mini.CalculateInodeSpace(mini.inodeTable[parentInode]) < mini.CalculateEntrySize(mini.inodeTable[parentInode], filename, newInode)) || (mini.CalculateInodeSpace(mini.inodeTable[parentInode]) < (sizeof(int) + filename.size() + sizeof(uint16_t)))) {
+            throw std::runtime_error(
+                std::string("No Space In this Directory, Remaining space in inode: ") +
+                std::to_string(mini.CalculateInodeSpace(mini.inodeTable[parentInode])) +
+                " bytes"
+            );
+        }
+
+        // Add to parent folder
+        mini.inodeTable[parentInode].entries[filename] = newInode;
+        mini.inodeTable[parentInode].modificationTime = time(nullptr);
+        mini.inodeTable[parentInode].isDirty = true;
+
+       // Update owner inode
+        mini.inodeTable[ownerInode].isDirty = true;
+
         // Save changes
         mini.SaveInodeToDisk(newInode);
         mini.SaveInodeToDisk(parentInode);
@@ -926,7 +948,6 @@ int Parser::createFile(const std::string& path, const std::string name, MiniHSFS
         mini.inodeTable[parentInode].isDirty = true;
         mini.inodeTable[ownerInode].inodeInfo.Usage -= mini.inodeSize;
         mini.inodeTable[newInode] = MiniHSFS::Inode();
-
         throw std::runtime_error("Failed to create file: " + std::string(e.what()));
     }
 }
@@ -1316,9 +1337,8 @@ bool Parser::writeFile(const std::string& path, const std::vector<char>& data, M
     }
 }
 
-bool Parser::rename(const std::string& oldPath, const std::string& newName, MiniHSFS& mini, std::string& currentPath) {
+bool Parser::rename(std::string& oldPath, const std::string& newName, MiniHSFS& mini, std::string& currentPath) {
     std::lock_guard<std::recursive_mutex> lock(mini.fsMutex);
-
     if (!mini.mounted)
     {
         mini.Disk().SetConsoleColor(mini.Disk().Red);
@@ -1326,61 +1346,59 @@ bool Parser::rename(const std::string& oldPath, const std::string& newName, Mini
         mini.Disk().SetConsoleColor(mini.Disk().Default);
     }
 
-    checkingAccount(mini, 0, true, currentPath);
-
-    mini.ValidatePath(oldPath);
-
-    auto pathComponents = mini.SplitPath(oldPath);
-    if (pathComponents.empty())
+    try
     {
-        mini.Disk().SetConsoleColor(mini.Disk().Red);
-        throw std::invalid_argument("Invalid path");
-        mini.Disk().SetConsoleColor(mini.Disk().Default);
+        //Check my account
+        checkingAccount(mini, 0, true, currentPath);
+
+        //Validate my path
+        oldPath = mini.ValidatePath(oldPath);
+
+        if (!mini.ValidateEntry(newName))
+            throw std::invalid_argument("The file name contains illegal characters: " + newName);
+
+        auto pathComponents = mini.SplitPath(oldPath);
+        if (pathComponents.empty())
+            throw std::invalid_argument("Invalid path");
+
+        std::string oldEntryName = pathComponents.back();
+        pathComponents.pop_back();
+
+        int parentInode = mini.PathToInode(pathComponents);
+        if (parentInode == -1 || !mini.inodeTable[parentInode].isDirectory)
+            throw std::runtime_error("Parent directory not found");
+
+        auto& entries = mini.inodeTable[parentInode].entries;
+
+        // Check if the old name exists
+        if (entries.count(oldEntryName) == 0)
+            throw std::runtime_error("This name " + oldEntryName + " not found");
+
+        int targetInode = entries[oldEntryName];
+
+        // Check that the new name does not already exist
+        if (entries.count(newName) > 0)
+            throw std::runtime_error("An entry with the new name " + newName + " already exists");
+
+        //Check Size befor adding
+        if ((mini.CalculateInodeSpace(mini.inodeTable[parentInode]) + mini.CalculateEntrySize(mini.inodeTable[parentInode], oldEntryName, targetInode) < mini.CalculateEntrySize(mini.inodeTable[parentInode], newName, targetInode)) || (mini.CalculateInodeSpace(mini.inodeTable[parentInode]) + mini.CalculateEntrySize(mini.inodeTable[parentInode], oldEntryName, targetInode) < (sizeof(int) + newName.size() + sizeof(uint16_t)))) {
+            throw std::runtime_error(
+                std::string("No Space In this Directory, Remaining space in inode: ") +
+                std::to_string(mini.CalculateInodeSpace(mini.inodeTable[parentInode])) +
+                " bytes"
+            );
+        }
+
+        // Rename
+        entries.erase(oldEntryName);
+        entries[newName] = targetInode;
+
+        mini.UpdateInodeTimestamps(parentInode, true);
+        return true;
     }
-
-    std::string oldEntryName = pathComponents.back();
-    pathComponents.pop_back();
-
-    int parentInode = mini.PathToInode(pathComponents);
-    if (parentInode == -1 || !mini.inodeTable[parentInode].isDirectory)
-    {
-        mini.Disk().SetConsoleColor(mini.Disk().Red);
-        throw std::runtime_error("Parent directory not found");
-        mini.Disk().SetConsoleColor(mini.Disk().Default);
+    catch (const std::exception& e) {
+        throw std::runtime_error("Failed to rename entry: " + std::string(e.what()));
     }
-
-    auto& entries = mini.inodeTable[parentInode].entries;
-
-    // Check if the old name exists
-    if (entries.count(oldEntryName) == 0)
-    {
-        mini.Disk().SetConsoleColor(mini.Disk().Red);
-        throw std::runtime_error("This name " + oldEntryName + " not found");
-        mini.Disk().SetConsoleColor(mini.Disk().Default);
-    }
-
-    int targetInode = entries[oldEntryName];
-
-    // Check that the new name does not already exist
-    if (entries.count(newName) > 0)
-        throw std::runtime_error("An entry with the new name " + newName + " already exists");
-
-    const std::string invalidChars = R"(\/:*?"<>|)";
-
-    if (std::any_of(newName.begin(), newName.end(), [&](char ch) {
-        return invalidChars.find(ch) != std::string::npos;
-        })) {
-        mini.Disk().SetConsoleColor(mini.Disk().Red);
-        throw std::invalid_argument("The file name contains illegal characters: " + newName);
-        mini.Disk().SetConsoleColor(mini.Disk().Default);
-    }
-
-    // Rename
-    entries.erase(oldEntryName);
-    entries[newName] = targetInode;
-
-    mini.UpdateInodeTimestamps(parentInode, true);
-    return true;
 }
 
 bool Parser::move(const std::string& srcPath, const std::string& destPath, MiniHSFS& mini, std::string& currentPath) {
@@ -1531,21 +1549,6 @@ void Parser::exit(MiniHSFS& mini) {
     mini.Disk().SetConsoleColor(mini.Disk().Green);
     std::cout << "Bye :)" << std::endl;
     mini.Disk().SetConsoleColor(mini.Disk().Default);
-}
-
-void Parser::Network(MiniHSFS& mini)
-{
-    //run::currentPath = run::currentPath + run::DirName; //Get Current Directory
-
-    //Cloud cloud;
-    //std::string ip = cloud.getIPfromIpconfig();
-    //std::cout << "Local IP: " << "http://" << ip << ":8081" << '\n';
-
-    //httplib::Server svr;
-    //cloud.setupRoutes(svr, this, mini, token);
-    //std::cout << "Server is running at http://localhost:8081" << '\n';
-    //svr.listen("0.0.0.0", 8081);
-
 }
 
 // AI Analysis Functions

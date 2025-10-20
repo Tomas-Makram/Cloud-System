@@ -103,7 +103,7 @@ public:
     int dataStartIndex;
     time_t lastTimeWrite = -1;
     int rootNodeIndex = 0;
-    const int maxFileNameLength = 255;
+    const int maxFileNameLength = 20;
     const int maxPathLength = 4096;
     const int countAddExtraInode = 10;
 
@@ -126,7 +126,9 @@ public:
     int FindFile(const std::string& path);
     int FindFreeBlock();
     bool FreeFileBlocks(Inode& inode);
-    
+    size_t CalculateInodeSpace(const Inode& inode);
+    size_t CalculateEntrySize(Inode& inode, const std::string& name, int childInode);
+
     // Directory operations
     void MarkBlockUsed(int blockIndex);
 
@@ -149,21 +151,34 @@ private:
 
     //SuperBlock Structue Using To Get Info Super Block
     struct SuperblockInfo {
-        char magic[8];                   // 8 bytes (Name File System)
-        uint32_t version;               // 4 bytes
-        uint32_t systemSize;           // 4 bytes
-        uint32_t blockSize;           // 4 bytes
-        size_t inodeSize;            // 4 bytes
-        uint64_t totalBlocks;       // 8 bytes
-        uint64_t freeBlocks;       // 8 bytes
-        size_t totalInodes;       // 4 bytes
-        size_t dataStartIndex;   // 4 bytes
-        size_t freeInodes;      // 4 bytes
-        time_t creationTime;   // 8 bytes
-        time_t lastMountTime; // 8 bytes
-        time_t lastWriteTime;// 8 bytes
-        uint32_t state;     // 4 bytes
+        char magic[8];               // 8 bytes (Name of the FS)
+        uint32_t version;            // 4 bytes
+        uint32_t systemSize;         // Total number of system blocks (super + inode + btree)
+        uint32_t blockSize;          // Block size in bytes (usually 4096)
+        size_t inodeSize;            // Inode size in bytes (usually 512)
+
+        uint64_t totalBlocks;        // Total number of disk blocks
+        uint64_t freeBlocks;         //Number of free blocks
+
+        size_t totalInodes;          // Total number of inodes
+        size_t freeInodes;           // Number of free inodes
+
+        // Partition locations within the disk
+        size_t superBlockStart;      //Start of super block (usually 0)
+        size_t superBlockBlocks;     // عدد كتل السوبر بلوك
+        size_t inodeTableStart;      // Beginning of the inode table
+        size_t inodeTableBlocks;     //Number of blocks allocated to it
+        size_t btreeStart;           // Beginning of the B-Tree area
+        size_t btreeBlocks;          // Number of B-Tree blocks
+        size_t dataStartIndex;       // Start of the actual data area
+
+        time_t creationTime;
+        time_t lastMountTime;
+        time_t lastWriteTime;
+
+        uint32_t state;             // System state (e.g. 1 = Mounted, 0 = Clean)
     };
+
 
     // File Info Structure, Inode File Information Using in Defragmentation Inodes Table 
     struct FileInfo {

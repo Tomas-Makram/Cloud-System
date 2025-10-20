@@ -86,7 +86,11 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
             parse.createFile((args[1][0] == '/' ? "" : currentPath + (currentPath != "/" ? "/" : "")), args[x], mini, currentPath);
 
     else if ((args[0] == "redir" && args.size() == 3) || (args[0] == "refile" && args.size() == 3) || (args[0] == "rename" && args.size() == 3))
-        parse.rename(args[1][0] == '/' ? args[1] : currentPath + (currentPath != "/" ? "/" : "") + args[1], args[2], mini, currentPath);
+    {
+        std::string oldPath = args[1][0] == '/' ? args[1] : currentPath + (currentPath != "/" ? "/" : "") + args[1];
+        parse.rename(oldPath, args[2], mini, currentPath);
+
+    }
 
     else if (args[0] == "rd" && args.size() > 1)
         for (int x = 1; x < args.size(); x++)
@@ -364,7 +368,7 @@ void Tokenizer::handleCommand(const std::vector<std::string>& args, MiniHSFS& mi
         parse.exit(mini);
     
     else
-        throw std::exception("Error: unknown command\n");
+        throw std::runtime_error("Error: unknown command\n");
 }
 
 //Generate Command Line after parse argument

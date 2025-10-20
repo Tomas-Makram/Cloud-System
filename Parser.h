@@ -13,9 +13,6 @@
 #include "ChatBot.h"
 #include "AI.h"
 
-//#include "Cloud.h"
-//#include "Tokenizer.h"
-
 class Parser {
 public:
 
@@ -57,10 +54,9 @@ public:
 	bool deleteDirectory(const std::string& path, MiniHSFS& mini, std::string& currentPath);
 	int createFile(const std::string& path, const std::string name, MiniHSFS& mini, std::string& currentPath);
 	bool deleteFile(const std::string& path, MiniHSFS& mini, std::string& currentPath);
-	bool rename(const std::string& oldPath, const std::string& newName, MiniHSFS& mini, std::string& currentPath);
+	bool rename(std::string& oldPath, const std::string& newName, MiniHSFS& mini, std::string& currentPath);
 	bool move(const std::string& srcPath, const std::string& destPath, MiniHSFS& mini, std::string& currentPath);
 	bool copy(const std::string& srcPath, const std::string& destPath, MiniHSFS& mini, std::string& currentPath);
-	void Network(MiniHSFS& mini);
 
 	// Smart Read/Write with AI
 	std::vector<char> readFile(const std::string& path, MiniHSFS& mini, size_t maxChunkSize = 0, bool showProgress = true, const std::string& password = "", std::string currentPath = "");
