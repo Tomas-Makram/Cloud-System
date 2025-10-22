@@ -33,7 +33,7 @@ bool run::Auth(MiniHSFS& mini, Parser& parse, std::string& currentPath)
         mini.Disk().SetConsoleColor(mini.Disk().Default);
         return false;
     }
-
+    return false;
 }
 
 int main() {

@@ -43,10 +43,14 @@ void MiniHSFS::Initialize() {
     inodeBlocks = CalculateInodeBlocks();
     btreeBlocks = static_cast<int>(CalculateBTreeBlocks());
 
-    bool valid = ValidateBTreeConfiguration();   // التحقق من الكفاءة
+    bool valid = ValidateBTreeConfiguration();   // Proficiency verification
 
     if (!valid) {
-        std::cout << "Warning: B-Tree configuration may be inefficient!\n";
+        Disk().SetConsoleColor(Disk().Yellow);
+        std::cout << "Warning: ";
+        Disk().SetConsoleColor(Disk().Gray);
+        std::cout << "B-Tree configuration may be inefficient!\n";
+        Disk().SetConsoleColor(Disk().Default);
     }
 
     btreeStartIndex = static_cast<int>(inodeBlocks) + disk.getSystemBlocks() + superBlockBlocks;
@@ -64,12 +68,20 @@ void MiniHSFS::Initialize() {
 
             SaveInodeTable();
             SaveBTree();
+            
+            if (inodeSize <= sizeof(Inode)) {
+                Disk().SetConsoleColor(Disk().Yellow);
+                std::cout << "Warning: ";
+                Disk().SetConsoleColor(Disk().Gray);
+                std::cout << "You don't have any space in Inode because your Inode size [" << inodeSize << "]\n";
+                Disk().SetConsoleColor(Disk().Default);
+
+            }
         }
         initialized = true;
         dataStartIndex = LoadSuperblock().dataStartIndex;
     }
     catch (...) {
-        //FlushDirtyInodes();
         SaveBTree();
         std::cerr << "!!Memory pressure during initialization. Flushing all caches.\n";
 
